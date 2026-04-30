@@ -11,7 +11,7 @@ Install dependencies:
 pip install -r data_sources/requirements.txt
 ```
 
-Set your LLM provider and API key. For OpenAI:
+Set your LLM provider and API key. OpenAI is the default provider:
 
 ```bash
 export SEO_MACHINE_LLM_PROVIDER="openai"

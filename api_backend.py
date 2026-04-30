@@ -363,7 +363,7 @@ def run_action(
         content = prompt
     else:
         load_environment()
-        provider = os.getenv("SEO_MACHINE_LLM_PROVIDER", "anthropic").lower()
+        provider = os.getenv("SEO_MACHINE_LLM_PROVIDER", "openai").lower()
         if provider == "anthropic":
             content = call_anthropic(prompt)
         elif provider == "openai":

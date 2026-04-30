@@ -137,6 +137,17 @@ SERVICE_URL="$(gcloud run services describe "$SERVICE" \
 curl "$SERVICE_URL/health"
 ```
 
+If your service returns `"ANTHROPIC_API_KEY is required unless dry_run=true."`,
+the deployed revision is missing `SEO_MACHINE_LLM_PROVIDER=openai` or is running
+an older image. Set the Cloud Run environment variables and redeploy:
+
+```bash
+gcloud run services update "$SERVICE" \
+  --region "$REGION" \
+  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000 \
+  --set-secrets OPENAI_API_KEY=openai-api-key:latest
+```
+
 Run research:
 
 ```bash

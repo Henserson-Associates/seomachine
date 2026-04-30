@@ -57,6 +57,21 @@ class ApiBackendTests(unittest.TestCase):
         self.assertEqual(result.content, "# OpenAI result")
         mock_call_openai.assert_called_once()
 
+    @patch("api_backend.call_openai", return_value="# OpenAI default result")
+    def test_run_action_defaults_to_openai_provider(self, mock_call_openai):
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=False):
+            with patch("api_backend.load_environment"):
+                with patch.dict("os.environ", {}, clear=True):
+                    result = run_action(
+                        "/research",
+                        "Podcast Ads",
+                        dry_run=False,
+                        save=False,
+                    )
+
+        self.assertEqual(result.content, "# OpenAI default result")
+        mock_call_openai.assert_called_once()
+
     def test_call_openai_returns_output_text(self):
         mock_openai_class = Mock()
         mock_client = mock_openai_class.return_value
