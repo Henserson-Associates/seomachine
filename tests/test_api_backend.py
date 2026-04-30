@@ -6,11 +6,13 @@ from api_backend import (
     PROJECT_ROOT,
     available_actions,
     call_openai,
+    clean_model_output,
     normalize_action,
     output_path_for_action,
     run_action,
     slugify,
 )
+from api_server import ActionRequest, download_shopify_html
 
 
 class ApiBackendTests(unittest.TestCase):
@@ -18,6 +20,7 @@ class ApiBackendTests(unittest.TestCase):
         actions = available_actions()
 
         self.assertIn("research", actions)
+        self.assertIn("shopify", actions)
         self.assertIn("write", actions)
         self.assertIn("optimize", actions)
 
@@ -39,6 +42,20 @@ class ApiBackendTests(unittest.TestCase):
         self.assertEqual(research_path.parent, PROJECT_ROOT / "research")
         self.assertEqual(write_path.parent, PROJECT_ROOT / "drafts")
         self.assertTrue(research_path.name.startswith("brief-podcast-ads-"))
+
+    def test_output_path_for_shopify_uses_html_extension(self):
+        shopify_path = output_path_for_action("shopify", "Podcast Ads")
+
+        self.assertEqual(shopify_path.parent, PROJECT_ROOT / "output")
+        self.assertTrue(shopify_path.name.startswith("shopify-podcast-ads-"))
+        self.assertEqual(shopify_path.suffix, ".html")
+
+    def test_clean_model_output_removes_shopify_html_fence(self):
+        content = "```html\n<div class=\"article-in-this-article\"></div>\n```"
+
+        cleaned = clean_model_output("shopify", content)
+
+        self.assertEqual(cleaned, '<div class="article-in-this-article"></div>')
 
     @patch("api_backend.call_openai", return_value="# OpenAI result")
     def test_run_action_uses_openai_provider(self, mock_call_openai):
@@ -97,6 +114,23 @@ class ApiBackendTests(unittest.TestCase):
             model="gpt-test",
             input="prompt",
             max_output_tokens=100,
+        )
+
+    @patch("api_server.run_action")
+    def test_download_shopify_html_returns_attachment(self, mock_run_action):
+        mock_run_action.return_value = SimpleNamespace(
+            content='<div class="article-in-this-article"></div>',
+            artifact_path=PROJECT_ROOT / "output" / "shopify-test.html",
+        )
+
+        response = download_shopify_html(
+            ActionRequest(input="test", dry_run=True, save=True)
+        )
+
+        self.assertEqual(response.media_type, "text/html; charset=utf-8")
+        self.assertIn(
+            'attachment; filename="shopify-test.html"',
+            response.headers["content-disposition"],
         )
 
 

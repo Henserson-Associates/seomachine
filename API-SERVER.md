@@ -112,6 +112,52 @@ curl -X POST http://127.0.0.1:8000/analyze-existing \
   }'
 ```
 
+Create a Shopify-ready HTML article from a topic:
+
+```bash
+curl -X POST http://127.0.0.1:8000/shopify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "bmw dealerships toronto",
+    "save": true
+  }'
+```
+
+Convert an existing Markdown draft into Shopify HTML:
+
+```bash
+curl -X POST http://127.0.0.1:8000/shopify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "drafts/bmw-dealerships-toronto-2026-04-30.md",
+    "save": true
+  }'
+```
+
+The Shopify output is saved as:
+
+```text
+output/shopify-[slug]-[YYYY-MM-DD].html
+```
+
+The generated HTML is a Shopify article body fragment. It starts with:
+
+```html
+<div class="article-in-this-article">
+```
+
+Download the generated Shopify HTML as a file response:
+
+```bash
+curl -X POST http://127.0.0.1:8000/shopify/download \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "bmw dealerships toronto",
+    "save": true
+  }' \
+  -OJ
+```
+
 ## Dry Run
 
 Use `dry_run` to inspect the prompt without calling the LLM:
@@ -144,4 +190,5 @@ curl -X POST http://127.0.0.1:8000/research \
 - `/write` and `/article` save to `drafts/[slug]-[date].md`
 - `/rewrite` saves to `rewrites/[slug]-rewrite-[date].md`
 - `/optimize` saves to `drafts/optimization-report-[slug]-[date].md`
+- `/shopify` saves to `output/shopify-[slug]-[date].html`
 - Other commands save to the closest existing workflow folder.

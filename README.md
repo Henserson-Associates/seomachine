@@ -39,6 +39,14 @@ curl -X POST http://127.0.0.1:8000/research \
   -d '{"input":"podcast advertising guide for 2026","save":true}'
 ```
 
+Shopify HTML output is also available:
+
+```bash
+curl -X POST http://127.0.0.1:8000/shopify \
+  -H "Content-Type: application/json" \
+  -d '{"input":"drafts/example-article.md","save":true}'
+```
+
 See `API-SERVER.md` for all endpoints and examples.
 
 To package and deploy the API to Google Cloud Run, see `CLOUD-RUN.md`.

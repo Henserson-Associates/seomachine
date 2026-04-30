@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from api_backend import ActionError, available_actions, run_action
@@ -106,6 +106,35 @@ def run_named_action(request: ActionRequest) -> ActionResponse:
 @app.post("/actions/{action_name}", response_model=ActionResponse)
 def run_action_route(action_name: str, request: ActionRequest) -> ActionResponse:
     return execute_action(request, route_action=action_name)
+
+
+@app.post("/shopify/download")
+def download_shopify_html(request: ActionRequest) -> Response:
+    try:
+        result = run_action(
+            action="shopify",
+            target=request.input,
+            extra_instructions=request.extra_instructions,
+            context_files=request.context_files,
+            dry_run=request.dry_run,
+            save=request.save,
+        )
+    except ActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    filename = (
+        result.artifact_path.name
+        if result.artifact_path
+        else "shopify-article.html"
+    )
+
+    return Response(
+        content=result.content,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/{action_name}", response_model=ActionResponse)

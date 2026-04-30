@@ -53,6 +53,7 @@ OUTPUT_DIR_BY_ACTION = {
     "optimize": "drafts",
     "rewrite": "rewrites",
     "scrub": "rewrites",
+    "shopify": "output",
     "repurpose": "published",
     "publish-draft": "published",
     "landing-write": "drafts",
@@ -265,10 +266,25 @@ def output_path_for_action(action: str, target: str) -> Path:
         filename = f"{slug}-rewrite-{date}.md"
     elif action in {"write", "article"}:
         filename = f"{slug}-{date}.md"
+    elif action == "shopify":
+        filename = f"shopify-{slug}-{date}.html"
     else:
         filename = f"{action}-{slug}-{date}.md"
 
     return output_dir / filename
+
+
+def clean_model_output(action: str, content: str) -> str:
+    """Clean provider output for actions with strict artifact formats."""
+    if action != "shopify":
+        return content.strip()
+
+    cleaned = content.strip()
+    fence_match = re.fullmatch(r"```(?:html)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+
+    return cleaned
 
 
 def call_anthropic(prompt: str) -> str:
@@ -373,6 +389,8 @@ def run_action(
                 f"Unsupported LLM provider: {provider}. "
                 "Supported providers: anthropic, openai."
             )
+
+    content = clean_model_output(normalized_action, content)
 
     artifact_path = None
     if save and content:
