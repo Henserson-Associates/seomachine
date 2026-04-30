@@ -1,0 +1,50 @@
+.git
+.gitignore
+.DS_Store
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+credentials/
+secrets/
+*.key
+*.pem
+*.p12
+data_sources/config/.env
+data_sources/config/*_credentials.json
+
+# Python and test artifacts
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+env/
+.venv/
+
+# Generated content and caches
+data_sources/cache/*
+!data_sources/cache/.gitkeep
+research/*
+!research/.gitkeep
+drafts/*
+!drafts/.gitkeep
+rewrites/*
+!rewrites/.gitkeep
+published/*
+!published/.gitkeep
+output/
+
+# Editor and local files
+.vscode/
+.idea/
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+NOTES.md
+personal-*.md

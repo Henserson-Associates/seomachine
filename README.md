@@ -19,6 +19,30 @@ SEO Machine is built on Claude Code and provides:
 - [Claude Code](https://claude.com/claude-code) installed
 - Anthropic API account
 
+### Optional: HTTP API Backend
+
+If you want to generate briefs and drafts through HTTP requests instead of
+typing slash commands in Claude Code, run the FastAPI backend:
+
+```bash
+pip install -r data_sources/requirements.txt
+export SEO_MACHINE_LLM_PROVIDER="openai"
+export OPENAI_API_KEY="your_api_key"
+uvicorn api_server:app --reload --host 127.0.0.1 --port 8000
+```
+
+Example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/research \
+  -H "Content-Type: application/json" \
+  -d '{"input":"podcast advertising guide for 2026","save":true}'
+```
+
+See `API-SERVER.md` for all endpoints and examples.
+
+To package and deploy the API to Google Cloud Run, see `CLOUD-RUN.md`.
+
 ### Installation
 
 1. Clone this repository:

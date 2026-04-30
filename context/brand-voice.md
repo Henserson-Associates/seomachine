@@ -5,7 +5,7 @@
      Delete these instruction comments when done.
      See examples/castos/ for a complete real-world example. -->
 
-This document defines the [YOUR COMPANY] brand voice, tone, and messaging framework. Reference this when writing all content to ensure consistency.
+This document defines the Valencia Massage Chairs brand voice, tone, and messaging framework. Reference this when writing all content to ensure consistency.
 
 ## Brand Voice Pillars
 
@@ -17,40 +17,42 @@ This document defines the [YOUR COMPANY] brand voice, tone, and messaging framew
      - Avoid (what NOT to do)
 -->
 
-### 1. [VOICE PILLAR NAME]
-- **What it means**: [Explain the core concept of this voice characteristic]
-- **How it sounds**: [Describe how this comes across in writing - tone, style, approach]
-- **Example**: "[Write an example sentence that demonstrates this voice pillar]"
-- **Avoid**: [List what to avoid - opposite tones, styles, or approaches]
+### 1. Refined Luxury, Always Calm
+- **What it means**: Calm, polished writing that feels like a quiet showroom—not an ad.
+- **How it sounds**: Measured, clear, and unhurried. The reader should feel guided, not pushed.
+- **Example (verbatim)**: "Discover your personal sanctuary of relaxation with the Oasis Massage Chair — thoughtfully designed to bring intelligent therapy and everyday luxury into your home."
+- **Avoid**: Shouting, excessive punctuation, gimmicky urgency, “must-have” language.
 
-### 2. [VOICE PILLAR NAME]
-- **What it means**: [Explain the core concept]
-- **How it sounds**: [Describe the execution]
-- **Example**: "[Example sentence]"
-- **Avoid**: [What to avoid]
 
-### 3. [VOICE PILLAR NAME]
-- **What it means**: [Explain the core concept]
-- **How it sounds**: [Describe the execution]
-- **Example**: "[Example sentence]"
-- **Avoid**: [What to avoid]
+### 2. Intelligent, Human-Like Comfort (Explained Simply)
+- **What it means**: Translate features into what the reader experiences—where it targets, how it feels, and how it fits into a normal day.
+- **How it sounds**: Plain language first; technical detail second. Use “human-like movements” and “precision” only when explained.
+- **Example (verbatim)**: "Powered by a dual-massage mechanism, Oasis delivers fluid, human-like movements that work in harmony to ease tension and restore balance from neck to lower back."
+- **Avoid**: Walls of specs, unexplained jargon, and acronyms without context.
 
-### 4. [VOICE PILLAR NAME] (Optional)
-- **What it means**: [Explain the core concept]
-- **How it sounds**: [Describe the execution]
-- **Example**: "[Example sentence]"
-- **Avoid**: [What to avoid]
+### 3. Precision You Can Trust
+- **What it means**: Be accurate, specific, and realistic. The reader should feel safe trusting the information.
+- **How it sounds**: Grounded and careful. Use “can help,” “may,” and “is associated with.” Use numbers only when model-specific.
+- **Example (verbatim)**: "An automatic body scan customizes each session to your unique contours, ensuring precise roller placement and consistent comfort."
+- **Avoid**: Guarantees, medical claims, and one-size-fits-all statements.
 
-### 5. [VOICE PILLAR NAME] (Optional)
-- **What it means**: [Explain the core concept]
-- **How it sounds**: [Describe the execution]
-- **Example**: "[Example sentence]"
-- **Avoid**: [What to avoid]
+### 4. Designed for Your Space (Not Just a Spec Sheet)
+- **What it means**: Be accurate, specific, and realistic. The reader should feel safe trusting the information.
+- **How it sounds**: Grounded and careful. Use “can help,” “may,” and “is associated with.” Use numbers only when model-specific.
+- **Example (verbatim)**: "An automatic body scan customizes each session to your unique contours, ensuring precise roller placement and consistent comfort."
+- **Avoid**: Guarantees, medical claims, and one-size-fits-all statements.
+
+### 5. Therapeutic, Not Clinical
+- **What it means**: Speak to comfort, tension, stress, sleep, and recovery without crossing into medical claims.
+- **How it sounds**: “Ease tension,” “reduce pressure,” “deeper relaxation,” “restorative calm,” “targeted muscle relief.”
+- **Example (verbatim)**: "Recline into comfort with 2-stage Zero Gravity positioning, designed to reduce spinal pressure and promote deeper relaxation."
+- **Avoid**: Diagnosing conditions, claiming to treat/cure, or implying guaranteed outcomes.
+
 
 ## Tone Guidelines
 
 ### General Tone: [DESCRIBE YOUR GENERAL TONE]
-[Write a paragraph describing your overall tone. Example: "Imagine you're an experienced [expert in your field] helping a friend succeed. You know what you're talking about, you genuinely want them to succeed, and you explain things clearly without being patronizing."]
+Imagine a trusted advisor helping someone who feels tense, tired, or stiff and wants a practical path to feeling better at home. Write as if you’re answering real buyer questions with clarity and care. Keep it refined and easy to read, but never “salesy.”
 
 ### Tone Variations by Content Type
 
@@ -62,10 +64,10 @@ This document defines the [YOUR COMPANY] brand voice, tone, and messaging framew
 - "[Example phrase 2]"
 - "[Example phrase 3]"
 
-**Strategy/Advice Content**: [Adjectives describing tone for strategic content]
-- "[Example phrase 1]"
-- "[Example phrase 2]"
-- "[Example phrase 3]"
+**Strategy/Advice Content**: Consultative, reassuring, decision-oriented
+- "The right chair fits your body, your space, and your routine."
+- "If you share the chair, prioritize adjustability and effortless controls."
+- "When in doubt, choose comfort and coverage over extra features you won’t use."
 
 **Industry News/Trends**: [Adjectives describing tone for news/trends]
 - "[Example phrase 1]"
@@ -84,8 +86,8 @@ This document defines the [YOUR COMPANY] brand voice, tone, and messaging framew
 <!-- INSTRUCTIONS: Define 3-5 core messages that should be woven throughout your content.
      Each message should include the concept, key points, and when to use it. -->
 
-#### Message 1: [MESSAGE TITLE]
-- **Concept**: [One sentence describing the core message]
+#### Message 1: Bring the Reset Home
+- **Concept**:  A simple at-home routine can help you unwind—especially when stress and tension build up.
 - **Key Points**:
   - [Supporting point 1]
   - [Supporting point 2]
