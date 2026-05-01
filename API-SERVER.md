@@ -158,6 +158,52 @@ curl -X POST http://127.0.0.1:8000/shopify/download \
   -OJ
 ```
 
+Create Shopify HTML with two generated images and upload all assets to Google
+Cloud Storage:
+
+```bash
+curl -X POST http://127.0.0.1:8000/shopify-with-images \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "bmw dealerships toronto",
+    "save": true
+  }'
+```
+
+Required environment variables:
+
+```bash
+export GOOGLE_CLOUD_STORAGE_BUCKET="your-bucket-name"
+export OPENAI_IMAGE_MODEL="gpt-image-1.5"
+export OPENAI_IMAGE_SIZE="1536x1024"
+export OPENAI_IMAGE_QUALITY="medium"
+```
+
+The response includes:
+
+```json
+{
+  "action": "/shopify-with-images",
+  "html_asset": {
+    "gcs_uri": "gs://your-bucket/shopify/topic/date/file.html",
+    "public_url": "https://storage.googleapis.com/your-bucket/shopify/topic/date/file.html"
+  },
+  "image_assets": [
+    {
+      "public_url": "https://storage.googleapis.com/your-bucket/shopify/topic/date/image-1.png"
+    },
+    {
+      "public_url": "https://storage.googleapis.com/your-bucket/shopify/topic/date/image-2.png"
+    }
+  ],
+  "content": "<div class=\"article-in-this-article\">..."
+}
+```
+
+OpenAI's public image docs currently list GPT Image models such as
+`gpt-image-1.5`, `gpt-image-1`, and `gpt-image-1-mini`. If your account has
+access to a newer `gpt-image-2` model, set `OPENAI_IMAGE_MODEL=gpt-image-2`.
+
 ## Dry Run
 
 Use `dry_run` to inspect the prompt without calling the LLM:
@@ -191,4 +237,6 @@ curl -X POST http://127.0.0.1:8000/research \
 - `/rewrite` saves to `rewrites/[slug]-rewrite-[date].md`
 - `/optimize` saves to `drafts/optimization-report-[slug]-[date].md`
 - `/shopify` saves to `output/shopify-[slug]-[date].html`
+- `/shopify-with-images` saves to `output/shopify-with-images-[slug]-[date].html`
+  and uploads the HTML plus two images to Google Cloud Storage.
 - Other commands save to the closest existing workflow folder.

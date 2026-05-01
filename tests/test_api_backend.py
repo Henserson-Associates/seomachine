@@ -7,12 +7,15 @@ from api_backend import (
     available_actions,
     call_openai,
     clean_model_output,
+    build_shopify_image_prompts,
+    insert_shopify_images,
     normalize_action,
     output_path_for_action,
     run_action,
+    run_shopify_with_images,
     slugify,
 )
-from api_server import ActionRequest, download_shopify_html
+from api_server import ActionRequest, download_shopify_html, shopify_with_images
 
 
 class ApiBackendTests(unittest.TestCase):
@@ -21,6 +24,7 @@ class ApiBackendTests(unittest.TestCase):
 
         self.assertIn("research", actions)
         self.assertIn("shopify", actions)
+        self.assertIn("shopify-with-images", actions)
         self.assertIn("write", actions)
         self.assertIn("optimize", actions)
 
@@ -49,6 +53,13 @@ class ApiBackendTests(unittest.TestCase):
         self.assertEqual(shopify_path.parent, PROJECT_ROOT / "output")
         self.assertTrue(shopify_path.name.startswith("shopify-podcast-ads-"))
         self.assertEqual(shopify_path.suffix, ".html")
+
+    def test_output_path_for_shopify_with_images_uses_html_extension(self):
+        path = output_path_for_action("shopify-with-images", "Podcast Ads")
+
+        self.assertEqual(path.parent, PROJECT_ROOT / "output")
+        self.assertTrue(path.name.startswith("shopify-with-images-podcast-ads-"))
+        self.assertEqual(path.suffix, ".html")
 
     def test_clean_model_output_removes_shopify_html_fence(self):
         content = "```html\n<div class=\"article-in-this-article\"></div>\n```"
@@ -116,6 +127,43 @@ class ApiBackendTests(unittest.TestCase):
             max_output_tokens=100,
         )
 
+    def test_build_shopify_image_prompts_returns_two_relevant_prompts(self):
+        html = """
+        <div class="article-in-this-article"></div>
+        <h1>BMW Dealerships Toronto</h1>
+        <p>Find the right BMW dealer in Toronto.</p>
+        <h2>Compare dealership locations</h2>
+        <h2>Service and financing</h2>
+        """
+
+        prompts = build_shopify_image_prompts(html, "bmw dealerships toronto")
+
+        self.assertEqual(len(prompts), 2)
+        self.assertIn("BMW Dealerships Toronto", prompts[0])
+        self.assertIn("Service and financing", prompts[1])
+
+    def test_insert_shopify_images_adds_two_img_tags(self):
+        html = """
+        <div class="article-in-this-article"></div>
+        <h1>BMW Dealerships Toronto</h1>
+        <p>Intro paragraph.</p>
+        <h2>First section</h2>
+        <h2>Second section</h2>
+        """
+
+        result = insert_shopify_images(html, ["https://example.com/1.png", "https://example.com/2.png"])
+
+        self.assertIn('<img alt="" src="https://example.com/1.png"/>', result)
+        self.assertIn('<img alt="" src="https://example.com/2.png"/>', result)
+
+    def test_run_shopify_with_images_dry_run_does_not_generate_images(self):
+        result = run_shopify_with_images("bmw dealerships toronto", dry_run=True)
+
+        self.assertEqual(result.action, "shopify-with-images")
+        self.assertTrue(result.dry_run)
+        self.assertEqual(result.image_assets, [])
+        self.assertEqual(len(result.image_prompts), 2)
+
     @patch("api_server.run_action")
     def test_download_shopify_html_returns_attachment(self, mock_run_action):
         mock_run_action.return_value = SimpleNamespace(
@@ -132,6 +180,36 @@ class ApiBackendTests(unittest.TestCase):
             'attachment; filename="shopify-test.html"',
             response.headers["content-disposition"],
         )
+
+    @patch("api_server.run_shopify_with_images")
+    def test_shopify_with_images_route_serializes_uploads(self, mock_run):
+        asset = SimpleNamespace(
+            local_path=PROJECT_ROOT / "output" / "image-1.png",
+            gcs_uri="gs://bucket/image-1.png",
+            public_url="https://storage.googleapis.com/bucket/image-1.png",
+            content_type="image/png",
+        )
+        mock_run.return_value = SimpleNamespace(
+            action="shopify-with-images",
+            target="test",
+            dry_run=False,
+            artifact_path=PROJECT_ROOT / "output" / "article.html",
+            html_asset=SimpleNamespace(
+                local_path=PROJECT_ROOT / "output" / "article.html",
+                gcs_uri="gs://bucket/article.html",
+                public_url="https://storage.googleapis.com/bucket/article.html",
+                content_type="text/html; charset=utf-8",
+            ),
+            image_assets=[asset],
+            image_prompts=["prompt one", "prompt two"],
+            content="<div></div>",
+            prompt="prompt",
+        )
+
+        response = shopify_with_images(ActionRequest(input="test", save=True))
+
+        self.assertEqual(response.action, "/shopify-with-images")
+        self.assertEqual(response.image_assets[0].public_url, asset.public_url)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from api_backend import ActionError, available_actions, run_action
+from api_backend import ActionError, available_actions, run_action, run_shopify_with_images
 
 
 app = FastAPI(
@@ -57,6 +57,34 @@ class ActionResponse(BaseModel):
     artifact_path: Optional[str]
     content: str
     prompt: Optional[str] = None
+
+
+class UploadedAssetResponse(BaseModel):
+    local_path: str
+    gcs_uri: str
+    public_url: str
+    content_type: str
+
+
+class ShopifyWithImagesResponse(BaseModel):
+    action: str
+    input: str
+    dry_run: bool
+    artifact_path: Optional[str]
+    html_asset: Optional[UploadedAssetResponse]
+    image_assets: List[UploadedAssetResponse]
+    image_prompts: List[str]
+    content: str
+    prompt: Optional[str] = None
+
+
+def serialize_asset(asset) -> UploadedAssetResponse:
+    return UploadedAssetResponse(
+        local_path=str(asset.local_path),
+        gcs_uri=asset.gcs_uri,
+        public_url=asset.public_url,
+        content_type=asset.content_type,
+    )
 
 
 @app.get("/health")
@@ -134,6 +162,34 @@ def download_shopify_html(request: ActionRequest) -> Response:
         content=result.content,
         media_type="text/html; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/shopify-with-images", response_model=ShopifyWithImagesResponse)
+def shopify_with_images(request: ActionRequest) -> ShopifyWithImagesResponse:
+    try:
+        result = run_shopify_with_images(
+            target=request.input,
+            extra_instructions=request.extra_instructions,
+            context_files=request.context_files,
+            dry_run=request.dry_run,
+            save=request.save,
+        )
+    except ActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return ShopifyWithImagesResponse(
+        action=f"/{result.action}",
+        input=result.target,
+        dry_run=result.dry_run,
+        artifact_path=str(result.artifact_path) if result.artifact_path else None,
+        html_asset=serialize_asset(result.html_asset) if result.html_asset else None,
+        image_assets=[serialize_asset(asset) for asset in result.image_assets],
+        image_prompts=result.image_prompts,
+        content=result.content,
+        prompt=result.prompt if request.include_prompt else None,
     )
 
 

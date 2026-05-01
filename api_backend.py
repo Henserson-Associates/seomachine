@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import base64
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +55,7 @@ OUTPUT_DIR_BY_ACTION = {
     "rewrite": "rewrites",
     "scrub": "rewrites",
     "shopify": "output",
+    "shopify-with-images": "output",
     "repurpose": "published",
     "publish-draft": "published",
     "landing-write": "drafts",
@@ -70,6 +72,27 @@ class ActionResult:
     target: str
     content: str
     artifact_path: Optional[Path]
+    prompt: str
+    dry_run: bool
+
+
+@dataclass
+class UploadedAsset:
+    local_path: Path
+    gcs_uri: str
+    public_url: str
+    content_type: str
+
+
+@dataclass
+class ShopifyWithImagesResult:
+    action: str
+    target: str
+    content: str
+    artifact_path: Optional[Path]
+    html_asset: Optional[UploadedAsset]
+    image_assets: List[UploadedAsset]
+    image_prompts: List[str]
     prompt: str
     dry_run: bool
 
@@ -266,8 +289,8 @@ def output_path_for_action(action: str, target: str) -> Path:
         filename = f"{slug}-rewrite-{date}.md"
     elif action in {"write", "article"}:
         filename = f"{slug}-{date}.md"
-    elif action == "shopify":
-        filename = f"shopify-{slug}-{date}.html"
+    elif action in {"shopify", "shopify-with-images"}:
+        filename = f"{action}-{slug}-{date}.html"
     else:
         filename = f"{action}-{slug}-{date}.md"
 
@@ -276,7 +299,7 @@ def output_path_for_action(action: str, target: str) -> Path:
 
 def clean_model_output(action: str, content: str) -> str:
     """Clean provider output for actions with strict artifact formats."""
-    if action != "shopify":
+    if action not in {"shopify", "shopify-with-images"}:
         return content.strip()
 
     cleaned = content.strip()
@@ -357,6 +380,234 @@ def call_openai(prompt: str) -> str:
                 chunks.append(text)
 
     return "\n".join(chunks).strip()
+
+
+def extract_shopify_article_signals(html: str) -> Dict[str, List[str] | str]:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    h1 = soup.find("h1")
+    h2s = [tag.get_text(" ", strip=True) for tag in soup.find_all("h2")]
+    paragraphs = [tag.get_text(" ", strip=True) for tag in soup.find_all("p")]
+
+    return {
+        "title": h1.get_text(" ", strip=True) if h1 else "Shopify article",
+        "sections": h2s[:8],
+        "summary": " ".join(paragraphs[:4])[:1200],
+    }
+
+
+def build_shopify_image_prompts(html: str, target: str) -> List[str]:
+    signals = extract_shopify_article_signals(html)
+    title = str(signals["title"])
+    sections = "; ".join(signals["sections"]) if signals["sections"] else target
+    summary = str(signals["summary"])
+
+    base_style = (
+        "Create a polished editorial blog image for a Shopify article. "
+        "Photorealistic, premium ecommerce publication style, natural lighting, "
+        "clean composition, no visible text, no watermarks, no logos, no UI mockups. "
+        "The image must be directly relevant to the article."
+    )
+
+    return [
+        (
+            f"{base_style} Hero image for an article titled '{title}'. "
+            f"Article topic: {target}. Context: {summary}"
+        ),
+        (
+            f"{base_style} Supporting in-article image illustrating these sections: "
+            f"{sections}. Article topic: {target}. Make it visually distinct from the hero image."
+        ),
+    ]
+
+
+def call_openai_image(prompt: str) -> bytes:
+    load_environment()
+
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ActionError(
+            "The openai package is not installed. Run "
+            "'pip install -r data_sources/requirements.txt'."
+        ) from exc
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ActionError("OPENAI_API_KEY is required for image generation.")
+
+    model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
+    size = os.getenv("OPENAI_IMAGE_SIZE", "1536x1024")
+    quality = os.getenv("OPENAI_IMAGE_QUALITY", "medium")
+
+    client = OpenAI(api_key=api_key)
+    response = client.images.generate(
+        model=model,
+        prompt=prompt,
+        size=size,
+        quality=quality,
+        n=1,
+    )
+
+    if not response.data:
+        raise ActionError("OpenAI image generation returned no image data.")
+
+    image_base64 = getattr(response.data[0], "b64_json", None)
+    if not image_base64:
+        raise ActionError("OpenAI image generation did not return base64 image data.")
+
+    return base64.b64decode(image_base64)
+
+
+def upload_file_to_gcs(local_path: Path, object_name: str, content_type: str) -> UploadedAsset:
+    load_environment()
+
+    bucket_name = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET") or os.getenv("GCS_BUCKET")
+    if not bucket_name:
+        raise ActionError("GOOGLE_CLOUD_STORAGE_BUCKET is required for /shopify-with-images.")
+
+    try:
+        from google.cloud import storage
+    except ImportError as exc:
+        raise ActionError(
+            "The google-cloud-storage package is not installed. Run "
+            "'pip install -r data_sources/requirements.txt'."
+        ) from exc
+
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(object_name)
+    blob.upload_from_filename(str(local_path), content_type=content_type)
+
+    return UploadedAsset(
+        local_path=local_path,
+        gcs_uri=f"gs://{bucket_name}/{object_name}",
+        public_url=f"https://storage.googleapis.com/{bucket_name}/{object_name}",
+        content_type=content_type,
+    )
+
+
+def insert_shopify_images(html: str, image_urls: List[str]) -> str:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    h1 = soup.find("h1")
+    insertion_points = []
+    if h1:
+        first_p_after_h1 = h1.find_next("p")
+        if first_p_after_h1:
+            insertion_points.append(first_p_after_h1)
+
+    h2s = soup.find_all("h2")
+    if len(h2s) >= 2:
+        insertion_points.append(h2s[1])
+    elif h2s:
+        insertion_points.append(h2s[0])
+
+    for index, image_url in enumerate(image_urls[:2]):
+        img_p = soup.new_tag("p")
+        img = soup.new_tag("img", src=image_url, alt="")
+        img_p.append(img)
+
+        if index < len(insertion_points):
+            insertion_points[index].insert_after(img_p)
+        else:
+            soup.append(img_p)
+
+    return str(soup)
+
+
+def run_shopify_with_images(
+    target: str,
+    extra_instructions: str = "",
+    context_files: Optional[Iterable[str]] = None,
+    dry_run: bool = False,
+    save: bool = True,
+) -> ShopifyWithImagesResult:
+    action = "shopify-with-images"
+    prompt = build_prompt(
+        action="shopify",
+        target=target,
+        extra_instructions=(
+            f"{extra_instructions}\n\n"
+            "Generate Shopify HTML first. The backend will generate and insert two "
+            "relevant images after the HTML is produced."
+        ).strip(),
+        context_files=context_files,
+    )
+
+    if dry_run:
+        image_prompts = [
+            "Dry run: hero image prompt will be based on generated Shopify HTML.",
+            "Dry run: supporting image prompt will be based on generated Shopify HTML.",
+        ]
+        return ShopifyWithImagesResult(
+            action=action,
+            target=target,
+            content=prompt,
+            artifact_path=None,
+            html_asset=None,
+            image_assets=[],
+            image_prompts=image_prompts,
+            prompt=prompt,
+            dry_run=True,
+        )
+
+    shopify_result = run_action(
+        "shopify",
+        target,
+        extra_instructions=extra_instructions,
+        context_files=context_files,
+        dry_run=False,
+        save=False,
+    )
+
+    html = clean_model_output(action, shopify_result.content)
+    image_prompts = build_shopify_image_prompts(html, target)
+    slug = slugify(target, fallback="shopify")
+    date = datetime.now().strftime("%Y-%m-%d")
+    output_dir = PROJECT_ROOT / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    image_assets = []
+    image_urls = []
+    image_extension = os.getenv("OPENAI_IMAGE_EXTENSION", "png").lstrip(".")
+
+    for index, image_prompt in enumerate(image_prompts, 1):
+        image_bytes = call_openai_image(image_prompt)
+        image_path = output_dir / f"shopify-{slug}-{date}-image-{index}.{image_extension}"
+        image_path.write_bytes(image_bytes)
+        image_object = f"shopify/{slug}/{date}/image-{index}.{image_extension}"
+        image_asset = upload_file_to_gcs(
+            image_path,
+            image_object,
+            f"image/{image_extension}",
+        )
+        image_assets.append(image_asset)
+        image_urls.append(image_asset.public_url)
+
+    html_with_images = insert_shopify_images(html, image_urls)
+    artifact_path = output_path_for_action(action, target)
+    artifact_path.write_text(html_with_images + "\n", encoding="utf-8")
+
+    html_asset = upload_file_to_gcs(
+        artifact_path,
+        f"shopify/{slug}/{date}/{artifact_path.name}",
+        "text/html; charset=utf-8",
+    )
+
+    return ShopifyWithImagesResult(
+        action=action,
+        target=target,
+        content=html_with_images,
+        artifact_path=artifact_path,
+        html_asset=html_asset,
+        image_assets=image_assets,
+        image_prompts=image_prompts,
+        prompt=prompt,
+        dry_run=False,
+    )
 
 
 def run_action(

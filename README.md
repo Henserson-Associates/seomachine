@@ -47,6 +47,14 @@ curl -X POST http://127.0.0.1:8000/shopify \
   -d '{"input":"drafts/example-article.md","save":true}'
 ```
 
+Shopify HTML with two generated images uploaded to Google Cloud Storage:
+
+```bash
+curl -X POST http://127.0.0.1:8000/shopify-with-images \
+  -H "Content-Type: application/json" \
+  -d '{"input":"bmw dealerships toronto","save":true}'
+```
+
 See `API-SERVER.md` for all endpoints and examples.
 
 To package and deploy the API to Google Cloud Run, see `CLOUD-RUN.md`.

@@ -57,6 +57,7 @@ export PROJECT_ID="your-google-cloud-project-id"
 export REGION="us-central1"
 export REPOSITORY="seo-machine"
 export SERVICE="seo-machine-api"
+export BUCKET="your-seo-machine-bucket"
 
 gcloud config set project "$PROJECT_ID"
 ```
@@ -68,6 +69,7 @@ gcloud services enable \
   run.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
+  storage.googleapis.com \
   secretmanager.googleapis.com
 ```
 
@@ -79,6 +81,26 @@ gcloud artifacts repositories create "$REPOSITORY" \
   --location="$REGION" \
   --description="SEO Machine API containers"
 ```
+
+Create a Google Cloud Storage bucket for generated Shopify HTML and images:
+
+```bash
+gcloud storage buckets create "gs://$BUCKET" \
+  --location="$REGION" \
+  --uniform-bucket-level-access
+```
+
+If you want the returned `https://storage.googleapis.com/...` URLs to be public,
+grant public read access:
+
+```bash
+gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
+  --member=allUsers \
+  --role=roles/storage.objectViewer
+```
+
+If you keep the bucket private, use the returned `gs://...` URIs internally or
+add signed URL support later.
 
 Create a Secret Manager secret for your OpenAI key:
 
@@ -108,6 +130,14 @@ gcloud secrets add-iam-policy-binding openai-api-key \
 If you deploy with a custom Cloud Run service account, grant
 `roles/secretmanager.secretAccessor` to that service account instead.
 
+Grant the Cloud Run runtime service account permission to upload objects:
+
+```bash
+gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
+  --member="serviceAccount:$PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+```
+
 ## Deploy With Cloud Build
 
 The included `cloudbuild.yaml` builds the Docker image, pushes it to Artifact
@@ -116,7 +146,7 @@ Registry, and deploys Cloud Run.
 ```bash
 gcloud builds submit \
   --config cloudbuild.yaml \
-  --substitutions _REGION="$REGION",_REPOSITORY="$REPOSITORY",_SERVICE="$SERVICE"
+  --substitutions _REGION="$REGION",_REPOSITORY="$REPOSITORY",_SERVICE="$SERVICE",_BUCKET="$BUCKET"
 ```
 
 When the build finishes, get the service URL:
@@ -144,7 +174,7 @@ an older image. Set the Cloud Run environment variables and redeploy:
 ```bash
 gcloud run services update "$SERVICE" \
   --region "$REGION" \
-  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000 \
+  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET" \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest
 ```
 
@@ -152,6 +182,14 @@ Run research:
 
 ```bash
 curl -X POST "$SERVICE_URL/research" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"bmw dealerships toronto","save":true}'
+```
+
+Generate Shopify HTML with two images and upload all assets:
+
+```bash
+curl -X POST "$SERVICE_URL/shopify-with-images" \
   -H "Content-Type: application/json" \
   -d '{"input":"bmw dealerships toronto","save":true}'
 ```
@@ -170,7 +208,7 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000 \
+  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET" \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest
 ```
 

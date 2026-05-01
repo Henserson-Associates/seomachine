@@ -3,6 +3,7 @@ substitutions:
   _REPOSITORY: seo-machine
   _SERVICE: seo-machine-api
   _IMAGE: api
+  _BUCKET: seo-machine-articles
 
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -38,7 +39,7 @@ steps:
       - managed
       - --allow-unauthenticated
       - --set-env-vars
-      - SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000
+      - SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,GOOGLE_CLOUD_STORAGE_BUCKET=${_BUCKET}
       - --set-secrets
       - OPENAI_API_KEY=openai-api-key:latest
 
