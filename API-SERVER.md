@@ -174,6 +174,7 @@ Required environment variables:
 
 ```bash
 export GOOGLE_CLOUD_STORAGE_BUCKET="your-bucket-name"
+export SHOPIFY_GCS_CATEGORY="wellness"
 export OPENAI_IMAGE_MODEL="gpt-image-1.5"
 export OPENAI_IMAGE_SIZE="1536x1024"
 export OPENAI_IMAGE_QUALITY="medium"
@@ -185,15 +186,15 @@ The response includes:
 {
   "action": "/shopify-with-images",
   "html_asset": {
-    "gcs_uri": "gs://your-bucket/shopify/topic/date/file.html",
-    "public_url": "https://storage.googleapis.com/your-bucket/shopify/topic/date/file.html"
+    "gcs_uri": "gs://your-bucket/shopify/wellness/url-optimized-title/url-optimized-title.html",
+    "public_url": "https://storage.googleapis.com/your-bucket/shopify/wellness/url-optimized-title/url-optimized-title.html"
   },
   "image_assets": [
     {
-      "public_url": "https://storage.googleapis.com/your-bucket/shopify/topic/date/image-1.png"
+      "public_url": "https://storage.googleapis.com/your-bucket/shopify/wellness/url-optimized-title/image-1.png"
     },
     {
-      "public_url": "https://storage.googleapis.com/your-bucket/shopify/topic/date/image-2.png"
+      "public_url": "https://storage.googleapis.com/your-bucket/shopify/wellness/url-optimized-title/image-2.png"
     }
   ],
   "content": "<div class=\"article-in-this-article\">..."

@@ -12,12 +12,14 @@ from api_backend import (
     build_topic_agent_prompt,
     insert_shopify_images,
     normalize_action,
+    optimized_url_slug,
     output_path_for_action,
     parse_article_plan,
     parse_topic_choices,
     run_action,
     run_shopify_with_images,
     run_write_10_articles,
+    shopify_gcs_prefix,
     slugify,
 )
 from api_server import (
@@ -50,6 +52,20 @@ class ApiBackendTests(unittest.TestCase):
             slugify("https://example.com/blog/podcast-ads/?utm=1"),
             "blog-podcast-ads",
         )
+
+    def test_optimized_url_slug_shortens_title(self):
+        self.assertEqual(
+            optimized_url_slug("Home Theater Seating Layout Guide: Row Spacing, Sightlines, and Comfort"),
+            "home-theater-seating-layout-guide",
+        )
+
+    def test_shopify_gcs_prefix_uses_wellness_and_optimized_title(self):
+        html = "<h1>Home Theater Seating Layout Guide: Row Spacing and Comfort</h1>"
+
+        with patch.dict("os.environ", {}, clear=True):
+            prefix = shopify_gcs_prefix(html, "Fallback Topic")
+
+        self.assertEqual(prefix, "shopify/wellness/home-theater-seating-layout-guide")
 
     def test_output_path_uses_existing_workflow_folders(self):
         research_path = output_path_for_action("research", "Podcast Ads")

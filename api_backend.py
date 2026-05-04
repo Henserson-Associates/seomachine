@@ -176,6 +176,40 @@ def slugify(value: str, fallback: str = "request") -> str:
     return slug[:80] or fallback
 
 
+def optimized_url_slug(value: str, fallback: str = "article", max_words: int = 8) -> str:
+    """Create a short SEO-style URL slug from an article title."""
+    value = re.split(r"[:|–—]", value, maxsplit=1)[0]
+    value = re.sub(r"\([^)]*\)", "", value)
+    words = re.findall(r"[a-zA-Z0-9]+", value.lower())
+    stopwords = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "by",
+        "for",
+        "from",
+        "how",
+        "in",
+        "is",
+        "of",
+        "on",
+        "the",
+        "to",
+        "vs",
+        "what",
+        "when",
+        "where",
+        "which",
+        "with",
+        "your",
+    }
+    keywords = [word for word in words if word not in stopwords]
+    if not keywords:
+        keywords = words
+    return "-".join(keywords[:max_words]) or fallback
+
+
 def read_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -687,6 +721,14 @@ def extract_shopify_article_signals(html: str) -> Dict[str, List[str] | str]:
     }
 
 
+def shopify_gcs_prefix(html: str, target: str) -> str:
+    signals = extract_shopify_article_signals(html)
+    title = str(signals.get("title") or target)
+    article_slug = optimized_url_slug(title, fallback=slugify(target, fallback="article"))
+    category = os.getenv("SHOPIFY_GCS_CATEGORY", "wellness").strip("/")
+    return f"shopify/{category}/{article_slug}"
+
+
 def build_shopify_image_prompts(html: str, target: str) -> List[str]:
     signals = extract_shopify_article_signals(html)
     title = str(signals["title"])
@@ -856,6 +898,8 @@ def run_shopify_with_images(
     html = clean_model_output(action, shopify_result.content)
     image_prompts = build_shopify_image_prompts(html, target)
     slug = slugify(target, fallback="shopify")
+    gcs_prefix = shopify_gcs_prefix(html, target)
+    article_slug = gcs_prefix.rsplit("/", 1)[-1]
     date = datetime.now().strftime("%Y-%m-%d")
     output_dir = PROJECT_ROOT / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -868,7 +912,7 @@ def run_shopify_with_images(
         image_bytes = call_openai_image(image_prompt)
         image_path = output_dir / f"shopify-{slug}-{date}-image-{index}.{image_extension}"
         image_path.write_bytes(image_bytes)
-        image_object = f"shopify/{slug}/{date}/image-{index}.{image_extension}"
+        image_object = f"{gcs_prefix}/image-{index}.{image_extension}"
         image_asset = upload_file_to_gcs(
             image_path,
             image_object,
@@ -883,7 +927,7 @@ def run_shopify_with_images(
 
     html_asset = upload_file_to_gcs(
         artifact_path,
-        f"shopify/{slug}/{date}/{artifact_path.name}",
+        f"{gcs_prefix}/{article_slug}.html",
         "text/html; charset=utf-8",
     )
 
