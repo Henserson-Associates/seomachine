@@ -12,7 +12,13 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from api_backend import ActionError, available_actions, run_action, run_shopify_with_images
+from api_backend import (
+    ActionError,
+    available_actions,
+    run_action,
+    run_shopify_with_images,
+    run_write_10_articles,
+)
 
 
 app = FastAPI(
@@ -78,12 +84,93 @@ class ShopifyWithImagesResponse(BaseModel):
     prompt: Optional[str] = None
 
 
+class Write10ArticlesRequest(BaseModel):
+    input: str = Field(
+        default="Valencia Theater Seating",
+        description="Company context, campaign brief, or content focus for the topic agent.",
+    )
+    extra_instructions: str = Field(
+        default="",
+        description="Additional constraints for topic selection and article generation.",
+    )
+    context_files: Optional[List[str]] = Field(
+        default=None,
+        description="Optional subset of context/*.md files to include.",
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="Return the topic-agent prompt without generating articles.",
+    )
+    save: bool = Field(
+        default=True,
+        description="Save local artifacts while uploading generated assets to GCS.",
+    )
+    include_prompt: bool = Field(
+        default=False,
+        description="Include the topic-agent prompt in the response.",
+    )
+    article_count: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Number of articles to generate. Defaults to 5 for faster testing; max is 10.",
+    )
+    continue_on_error: bool = Field(
+        default=True,
+        description="Continue generating remaining articles if one topic fails.",
+    )
+
+
+class TopicChoiceResponse(BaseModel):
+    topic: str
+    primary_keyword: str
+    angle: str
+    reason: str
+
+
+class BatchArticleResponse(BaseModel):
+    topic: TopicChoiceResponse
+    error: Optional[str]
+    artifact_path: Optional[str]
+    html_asset: Optional[UploadedAssetResponse]
+    image_assets: List[UploadedAssetResponse]
+
+
+class Write10ArticlesResponse(BaseModel):
+    action: str
+    input: str
+    dry_run: bool
+    topics: List[TopicChoiceResponse]
+    articles: List[BatchArticleResponse]
+    prompt: Optional[str] = None
+
+
 def serialize_asset(asset) -> UploadedAssetResponse:
     return UploadedAssetResponse(
         local_path=str(asset.local_path),
         gcs_uri=asset.gcs_uri,
         public_url=asset.public_url,
         content_type=asset.content_type,
+    )
+
+
+def serialize_topic(topic) -> TopicChoiceResponse:
+    return TopicChoiceResponse(
+        topic=topic.topic,
+        primary_keyword=topic.primary_keyword,
+        angle=topic.angle,
+        reason=topic.reason,
+    )
+
+
+def serialize_batch_article(article) -> BatchArticleResponse:
+    result = article.result
+    return BatchArticleResponse(
+        topic=serialize_topic(article.topic),
+        error=article.error,
+        artifact_path=str(result.artifact_path) if result and result.artifact_path else None,
+        html_asset=serialize_asset(result.html_asset) if result and result.html_asset else None,
+        image_assets=[serialize_asset(asset) for asset in result.image_assets] if result else [],
     )
 
 
@@ -190,6 +277,33 @@ def shopify_with_images(request: ActionRequest) -> ShopifyWithImagesResponse:
         image_prompts=result.image_prompts,
         content=result.content,
         prompt=result.prompt if request.include_prompt else None,
+    )
+
+
+@app.post("/write-10-articles", response_model=Write10ArticlesResponse)
+def write_10_articles(request: Write10ArticlesRequest) -> Write10ArticlesResponse:
+    try:
+        result = run_write_10_articles(
+            company_context=request.input,
+            extra_instructions=request.extra_instructions,
+            context_files=request.context_files,
+            dry_run=request.dry_run,
+            save=request.save,
+            article_count=request.article_count,
+            continue_on_error=request.continue_on_error,
+        )
+    except ActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return Write10ArticlesResponse(
+        action=f"/{result.action}",
+        input=result.company_context,
+        dry_run=result.dry_run,
+        topics=[serialize_topic(topic) for topic in result.topics],
+        articles=[serialize_batch_article(article) for article in result.articles],
+        prompt=result.topic_prompt if request.include_prompt else None,
     )
 
 

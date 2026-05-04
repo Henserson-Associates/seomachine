@@ -8,14 +8,23 @@ from api_backend import (
     call_openai,
     clean_model_output,
     build_shopify_image_prompts,
+    build_topic_agent_prompt,
     insert_shopify_images,
     normalize_action,
     output_path_for_action,
+    parse_topic_choices,
     run_action,
     run_shopify_with_images,
+    run_write_10_articles,
     slugify,
 )
-from api_server import ActionRequest, download_shopify_html, shopify_with_images
+from api_server import (
+    ActionRequest,
+    Write10ArticlesRequest,
+    download_shopify_html,
+    shopify_with_images,
+    write_10_articles,
+)
 
 
 class ApiBackendTests(unittest.TestCase):
@@ -25,6 +34,7 @@ class ApiBackendTests(unittest.TestCase):
         self.assertIn("research", actions)
         self.assertIn("shopify", actions)
         self.assertIn("shopify-with-images", actions)
+        self.assertIn("write-10-articles", actions)
         self.assertIn("write", actions)
         self.assertIn("optimize", actions)
 
@@ -60,6 +70,12 @@ class ApiBackendTests(unittest.TestCase):
         self.assertEqual(path.parent, PROJECT_ROOT / "output")
         self.assertTrue(path.name.startswith("shopify-with-images-podcast-ads-"))
         self.assertEqual(path.suffix, ".html")
+
+    def test_output_path_for_write_10_articles_uses_output_folder(self):
+        path = output_path_for_action("write-10-articles", "Valencia Theater Seating")
+
+        self.assertEqual(path.parent, PROJECT_ROOT / "output")
+        self.assertTrue(path.name.startswith("write-10-articles-valencia-theater-seating-"))
 
     def test_clean_model_output_removes_shopify_html_fence(self):
         content = "```html\n<div class=\"article-in-this-article\"></div>\n```"
@@ -127,6 +143,30 @@ class ApiBackendTests(unittest.TestCase):
             max_output_tokens=100,
         )
 
+    def test_build_topic_agent_prompt_mentions_valencia(self):
+        prompt = build_topic_agent_prompt("Valencia Theater Seating", article_count=10)
+
+        self.assertIn("Valencia Theater Seating", prompt)
+        self.assertIn("Choose exactly 10", prompt)
+        self.assertIn("Return JSON only", prompt)
+
+    def test_parse_topic_choices_extracts_json_fence(self):
+        response = """```json
+        [
+          {
+            "topic": "Best Home Theater Seating Ideas",
+            "primary_keyword": "home theater seating ideas",
+            "angle": "Design guide",
+            "reason": "Relevant to Valencia buyers"
+          }
+        ]
+        ```"""
+
+        topics = parse_topic_choices(response, article_count=1)
+
+        self.assertEqual(topics[0].topic, "Best Home Theater Seating Ideas")
+        self.assertEqual(topics[0].primary_keyword, "home theater seating ideas")
+
     def test_build_shopify_image_prompts_returns_two_relevant_prompts(self):
         html = """
         <div class="article-in-this-article"></div>
@@ -163,6 +203,23 @@ class ApiBackendTests(unittest.TestCase):
         self.assertTrue(result.dry_run)
         self.assertEqual(result.image_assets, [])
         self.assertEqual(len(result.image_prompts), 2)
+
+    def test_run_write_10_articles_dry_run_returns_topic_prompt(self):
+        result = run_write_10_articles(
+            company_context="Valencia Theater Seating",
+            dry_run=True,
+        )
+
+        self.assertEqual(result.action, "write-10-articles")
+        self.assertTrue(result.dry_run)
+        self.assertEqual(len(result.topics), 1)
+        self.assertEqual(result.articles, [])
+        self.assertIn("Choose exactly 5", result.topic_prompt)
+
+    def test_write_10_articles_request_defaults_to_five(self):
+        request = Write10ArticlesRequest(input="Valencia Theater Seating")
+
+        self.assertEqual(request.article_count, 5)
 
     @patch("api_server.run_action")
     def test_download_shopify_html_returns_attachment(self, mock_run_action):
@@ -210,6 +267,35 @@ class ApiBackendTests(unittest.TestCase):
 
         self.assertEqual(response.action, "/shopify-with-images")
         self.assertEqual(response.image_assets[0].public_url, asset.public_url)
+
+    @patch("api_server.run_write_10_articles")
+    def test_write_10_articles_route_returns_topics(self, mock_run):
+        topic = SimpleNamespace(
+            topic="Best Home Theater Seating Ideas",
+            primary_keyword="home theater seating ideas",
+            angle="Design guide",
+            reason="Relevant to Valencia buyers",
+        )
+        mock_run.return_value = SimpleNamespace(
+            action="write-10-articles",
+            company_context="Valencia Theater Seating",
+            dry_run=True,
+            topics=[topic],
+            articles=[],
+            topic_prompt="prompt",
+        )
+
+        response = write_10_articles(
+            Write10ArticlesRequest(
+                input="Valencia Theater Seating",
+                dry_run=True,
+                include_prompt=True,
+            )
+        )
+
+        self.assertEqual(response.action, "/write-10-articles")
+        self.assertEqual(response.topics[0].topic, topic.topic)
+        self.assertEqual(response.prompt, "prompt")
 
 
 if __name__ == "__main__":

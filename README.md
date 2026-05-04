@@ -55,6 +55,15 @@ curl -X POST http://127.0.0.1:8000/shopify-with-images \
   -d '{"input":"bmw dealerships toronto","save":true}'
 ```
 
+Batch article generation is available for Valencia Theater Seating. It defaults
+to 5 articles for faster testing and accepts `article_count` up to 10:
+
+```bash
+curl -X POST http://127.0.0.1:8000/write-10-articles \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Valencia Theater Seating","article_count":5,"save":true}'
+```
+
 See `API-SERVER.md` for all endpoints and examples.
 
 To package and deploy the API to Google Cloud Run, see `CLOUD-RUN.md`.

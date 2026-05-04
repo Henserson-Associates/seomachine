@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import base64
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +57,7 @@ OUTPUT_DIR_BY_ACTION = {
     "scrub": "rewrites",
     "shopify": "output",
     "shopify-with-images": "output",
+    "write-10-articles": "output",
     "repurpose": "published",
     "publish-draft": "published",
     "landing-write": "drafts",
@@ -94,6 +96,31 @@ class ShopifyWithImagesResult:
     image_assets: List[UploadedAsset]
     image_prompts: List[str]
     prompt: str
+    dry_run: bool
+
+
+@dataclass
+class TopicChoice:
+    topic: str
+    primary_keyword: str
+    angle: str
+    reason: str
+
+
+@dataclass
+class BatchArticleResult:
+    topic: TopicChoice
+    result: Optional[ShopifyWithImagesResult]
+    error: Optional[str]
+
+
+@dataclass
+class Write10ArticlesResult:
+    action: str
+    company_context: str
+    topics: List[TopicChoice]
+    articles: List[BatchArticleResult]
+    topic_prompt: str
     dry_run: bool
 
 
@@ -382,6 +409,118 @@ def call_openai(prompt: str) -> str:
     return "\n".join(chunks).strip()
 
 
+def build_topic_agent_prompt(
+    company_context: str,
+    article_count: int = 10,
+    extra_instructions: str = "",
+    context_files: Optional[Iterable[str]] = None,
+) -> str:
+    context = load_context(context_files=context_files, max_chars=60000)
+    return f"""You are the SEO topic strategy agent for Valencia Theater Seating.
+
+Choose exactly {article_count} SEO blog article topics for the company.
+
+Company context:
+{company_context}
+
+Default company positioning if not otherwise specified:
+- Company: Valencia Theater Seating
+- Category: premium home theater seating, cinema recliners, theater sofas, media room seating, luxury entertainment room furniture
+- Audience: homeowners, interior designers, home theater builders, families building media rooms, and premium furniture buyers
+- Goal: choose topics that can become Shopify blog articles and support product discovery, internal linking, and ecommerce conversion.
+
+Use this project context when choosing topics:
+{context}
+
+Extra instructions:
+{extra_instructions or "None"}
+
+Return JSON only. Do not use Markdown fences or commentary.
+
+Schema:
+[
+  {{
+    "topic": "specific article topic",
+    "primary_keyword": "primary SEO keyword",
+    "angle": "the article's unique angle",
+    "reason": "why this topic is relevant to Valencia Theater Seating"
+  }}
+]
+
+Rules:
+- Return exactly {article_count} objects.
+- Avoid duplicate or near-duplicate topics.
+- Make topics specific enough to become complete Shopify articles.
+- Prioritize buyer-intent, comparison, planning, and design topics.
+- Do not choose unrelated automotive, generic SEO, or non-furniture topics unless explicitly requested.
+""".strip()
+
+
+def _extract_json_array(text: str) -> List[Dict[str, str]]:
+    cleaned = text.strip()
+    fence_match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r"\[[\s\S]*\]", cleaned)
+        if not match:
+            raise
+        data = json.loads(match.group(0))
+
+    if not isinstance(data, list):
+        raise ActionError("Topic agent did not return a JSON array.")
+
+    return data
+
+
+def parse_topic_choices(text: str, article_count: int = 10) -> List[TopicChoice]:
+    raw_topics = _extract_json_array(text)
+    topics: List[TopicChoice] = []
+
+    for item in raw_topics:
+        if not isinstance(item, dict):
+            continue
+
+        topic = str(item.get("topic", "")).strip()
+        if not topic:
+            continue
+
+        topics.append(
+            TopicChoice(
+                topic=topic,
+                primary_keyword=str(item.get("primary_keyword", topic)).strip() or topic,
+                angle=str(item.get("angle", "")).strip(),
+                reason=str(item.get("reason", "")).strip(),
+            )
+        )
+
+    if len(topics) < article_count:
+        raise ActionError(
+            f"Topic agent returned {len(topics)} valid topics; expected {article_count}."
+        )
+
+    return topics[:article_count]
+
+
+def choose_article_topics(
+    company_context: str,
+    article_count: int = 10,
+    extra_instructions: str = "",
+    context_files: Optional[Iterable[str]] = None,
+) -> Tuple[List[TopicChoice], str]:
+    prompt = build_topic_agent_prompt(
+        company_context=company_context,
+        article_count=article_count,
+        extra_instructions=extra_instructions,
+        context_files=context_files,
+    )
+    response = call_openai(prompt)
+    return parse_topic_choices(response, article_count=article_count), prompt
+
+
 def extract_shopify_article_signals(html: str) -> Dict[str, List[str] | str]:
     from bs4 import BeautifulSoup
 
@@ -606,6 +745,85 @@ def run_shopify_with_images(
         image_assets=image_assets,
         image_prompts=image_prompts,
         prompt=prompt,
+        dry_run=False,
+    )
+
+
+def run_write_10_articles(
+    company_context: str = "Valencia Theater Seating",
+    extra_instructions: str = "",
+    context_files: Optional[Iterable[str]] = None,
+    dry_run: bool = False,
+    save: bool = True,
+    article_count: int = 5,
+    continue_on_error: bool = True,
+) -> Write10ArticlesResult:
+    if article_count < 1 or article_count > 10:
+        raise ActionError("article_count must be between 1 and 10.")
+
+    topic_prompt = build_topic_agent_prompt(
+        company_context=company_context,
+        article_count=article_count,
+        extra_instructions=extra_instructions,
+        context_files=context_files,
+    )
+
+    if dry_run:
+        example_topics = [
+            TopicChoice(
+                topic="Best Home Theater Seating Ideas for Luxury Media Rooms",
+                primary_keyword="home theater seating ideas",
+                angle="Design-led guide for premium media room buyers",
+                reason="Directly supports Valencia Theater Seating product discovery.",
+            )
+        ]
+        return Write10ArticlesResult(
+            action="write-10-articles",
+            company_context=company_context,
+            topics=example_topics,
+            articles=[],
+            topic_prompt=topic_prompt,
+            dry_run=True,
+        )
+
+    topics, topic_prompt = choose_article_topics(
+        company_context=company_context,
+        article_count=article_count,
+        extra_instructions=extra_instructions,
+        context_files=context_files,
+    )
+
+    articles: List[BatchArticleResult] = []
+    for topic in topics:
+        target = topic.topic
+        article_instructions = (
+            f"Company context: {company_context}\n"
+            f"Primary keyword: {topic.primary_keyword}\n"
+            f"Article angle: {topic.angle}\n"
+            f"Why this topic matters: {topic.reason}\n"
+            f"{extra_instructions}"
+        ).strip()
+
+        try:
+            result = run_shopify_with_images(
+                target=target,
+                extra_instructions=article_instructions,
+                context_files=context_files,
+                dry_run=False,
+                save=save,
+            )
+            articles.append(BatchArticleResult(topic=topic, result=result, error=None))
+        except Exception as exc:
+            if not continue_on_error:
+                raise
+            articles.append(BatchArticleResult(topic=topic, result=None, error=str(exc)))
+
+    return Write10ArticlesResult(
+        action="write-10-articles",
+        company_context=company_context,
+        topics=topics,
+        articles=articles,
+        topic_prompt=topic_prompt,
         dry_run=False,
     )
 

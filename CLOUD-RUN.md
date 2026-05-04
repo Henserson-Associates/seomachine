@@ -175,6 +175,7 @@ an older image. Set the Cloud Run environment variables and redeploy:
 gcloud run services update "$SERVICE" \
   --region "$REGION" \
   --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET" \
+  --timeout 3600s \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest
 ```
 
@@ -194,6 +195,18 @@ curl -X POST "$SERVICE_URL/shopify-with-images" \
   -d '{"input":"bmw dealerships toronto","save":true}'
 ```
 
+Generate 5 Valencia Theater Seating articles with two images each:
+
+```bash
+curl -X POST "$SERVICE_URL/write-10-articles" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Valencia Theater Seating","article_count":5,"save":true}'
+```
+
+This endpoint can run for several minutes. The deployment examples set Cloud
+Run's request timeout to 3600 seconds so the batch has time to finish. Increase
+`article_count` up to 10 when you are ready for a larger batch.
+
 ## Manual Build And Deploy
 
 If you do not want to use `cloudbuild.yaml`, run these commands:
@@ -209,6 +222,7 @@ gcloud run deploy "$SERVICE" \
   --platform managed \
   --allow-unauthenticated \
   --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET" \
+  --timeout 3600s \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest
 ```
 

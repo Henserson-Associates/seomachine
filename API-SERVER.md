@@ -204,6 +204,50 @@ OpenAI's public image docs currently list GPT Image models such as
 `gpt-image-1.5`, `gpt-image-1`, and `gpt-image-1-mini`. If your account has
 access to a newer `gpt-image-2` model, set `OPENAI_IMAGE_MODEL=gpt-image-2`.
 
+Choose 5 Valencia Theater Seating topics by default, generate Shopify HTML with
+two images per article, and upload all articles plus images to Google Cloud
+Storage. The endpoint still accepts `article_count` up to 10 when you are ready:
+
+```bash
+curl -X POST http://127.0.0.1:8000/write-10-articles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Valencia Theater Seating: premium home theater seating, theater recliners, theater sofas, media room seating, luxury entertainment room furniture",
+    "article_count": 5,
+    "save": true,
+    "dry_run": false
+  }'
+```
+
+The response includes the AI agent's selected topics:
+
+```json
+{
+  "action": "/write-10-articles",
+  "topics": [
+    {
+      "topic": "Best Home Theater Seating Ideas for Luxury Media Rooms",
+      "primary_keyword": "home theater seating ideas",
+      "angle": "Design-led guide for premium media room buyers",
+      "reason": "Directly supports Valencia Theater Seating product discovery."
+    }
+  ],
+  "articles": [
+    {
+      "topic": { "...": "..." },
+      "html_asset": { "...": "..." },
+      "image_assets": [{ "...": "..." }, { "...": "..." }],
+      "error": null
+    }
+  ]
+}
+```
+
+This endpoint is slow and expensive compared with the others: with the default
+`article_count` of 5, it performs one topic-selection call, 5 article-generation
+calls, and 10 image-generation calls. For Cloud Run, use a longer request
+timeout.
+
 ## Dry Run
 
 Use `dry_run` to inspect the prompt without calling the LLM:
