@@ -195,17 +195,18 @@ curl -X POST "$SERVICE_URL/shopify-with-images" \
   -d '{"input":"bmw dealerships toronto","save":true}'
 ```
 
-Generate 5 Valencia Theater Seating articles with two images each:
+Let the agent analyze Valencia Theater Seating's website, decide between 5 and
+20 articles, and generate two images for each:
 
 ```bash
 curl -X POST "$SERVICE_URL/write-10-articles" \
   -H "Content-Type: application/json" \
-  -d '{"input":"Valencia Theater Seating","article_count":5,"save":true}'
+  -d '{"save":true}'
 ```
 
 This endpoint can run for several minutes. The deployment examples set Cloud
-Run's request timeout to 3600 seconds so the batch has time to finish. Increase
-`article_count` up to 10 when you are ready for a larger batch.
+Run's request timeout to 3600 seconds so the batch has time to finish. You can
+force a specific count between 5 and 20 by passing `article_count`.
 
 ## Manual Build And Deploy
 

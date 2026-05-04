@@ -86,8 +86,8 @@ class ShopifyWithImagesResponse(BaseModel):
 
 class Write10ArticlesRequest(BaseModel):
     input: str = Field(
-        default="Valencia Theater Seating",
-        description="Company context, campaign brief, or content focus for the topic agent.",
+        default="https://valenciatheaterseating.com/",
+        description="Optional company website URL, company context, campaign brief, or content focus for the topic agent.",
     )
     extra_instructions: str = Field(
         default="",
@@ -109,11 +109,11 @@ class Write10ArticlesRequest(BaseModel):
         default=False,
         description="Include the topic-agent prompt in the response.",
     )
-    article_count: int = Field(
-        default=5,
-        ge=1,
-        le=10,
-        description="Number of articles to generate. Defaults to 5 for faster testing; max is 10.",
+    article_count: Optional[int] = Field(
+        default=None,
+        ge=5,
+        le=20,
+        description="Optional fixed article count. If omitted, the agent chooses between 5 and 20.",
     )
     continue_on_error: bool = Field(
         default=True,
@@ -140,6 +140,7 @@ class Write10ArticlesResponse(BaseModel):
     action: str
     input: str
     dry_run: bool
+    selected_count: int
     topics: List[TopicChoiceResponse]
     articles: List[BatchArticleResponse]
     prompt: Optional[str] = None
@@ -301,6 +302,7 @@ def write_10_articles(request: Write10ArticlesRequest) -> Write10ArticlesRespons
         action=f"/{result.action}",
         input=result.company_context,
         dry_run=result.dry_run,
+        selected_count=result.selected_count,
         topics=[serialize_topic(topic) for topic in result.topics],
         articles=[serialize_batch_article(article) for article in result.articles],
         prompt=result.topic_prompt if request.include_prompt else None,

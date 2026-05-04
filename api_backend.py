@@ -118,6 +118,7 @@ class BatchArticleResult:
 class Write10ArticlesResult:
     action: str
     company_context: str
+    selected_count: int
     topics: List[TopicChoice]
     articles: List[BatchArticleResult]
     topic_prompt: str
@@ -409,16 +410,103 @@ def call_openai(prompt: str) -> str:
     return "\n".join(chunks).strip()
 
 
+def analyze_website(url: str, max_pages: int = 8, max_chars: int = 30000) -> str:
+    import requests
+    from bs4 import BeautifulSoup
+
+    parsed_root = urlparse(url)
+    if not parsed_root.scheme or not parsed_root.netloc:
+        raise ActionError(f"Invalid website URL: {url}")
+
+    visited = set()
+    queue = [url]
+    pages = []
+
+    while queue and len(pages) < max_pages:
+        current_url = queue.pop(0)
+        if current_url in visited:
+            continue
+        visited.add(current_url)
+
+        try:
+            response = requests.get(current_url, timeout=20)
+            response.raise_for_status()
+        except Exception:
+            continue
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for element in soup(["script", "style", "noscript", "svg"]):
+            element.decompose()
+
+        title = soup.title.get_text(" ", strip=True) if soup.title else current_url
+        headings = [
+            tag.get_text(" ", strip=True)
+            for tag in soup.find_all(["h1", "h2", "h3"])
+            if tag.get_text(" ", strip=True)
+        ][:20]
+        links = []
+        for link in soup.find_all("a", href=True):
+            href = link["href"].strip()
+            label = link.get_text(" ", strip=True)
+            if not label:
+                continue
+            absolute = urlparse(href)
+            if href.startswith("/"):
+                href = f"{parsed_root.scheme}://{parsed_root.netloc}{href}"
+                absolute = urlparse(href)
+            if absolute.netloc and absolute.netloc != parsed_root.netloc:
+                continue
+            if any(skip in href.lower() for skip in ["cart", "checkout", "account", "login"]):
+                continue
+            links.append(f"{label} -> {href}")
+            if href.startswith(f"{parsed_root.scheme}://{parsed_root.netloc}") and href not in visited and href not in queue:
+                if any(term in href.lower() for term in ["home-theater", "seating", "blog", "faq", "guide", "material", "comfort"]):
+                    queue.append(href)
+
+        body = soup.get_text("\n", strip=True)
+        pages.append(
+            f"## Page: {title}\nURL: {current_url}\n\n"
+            f"Headings:\n- " + "\n- ".join(headings[:12]) + "\n\n"
+            f"Important links:\n- " + "\n- ".join(links[:30]) + "\n\n"
+            f"Text excerpt:\n{body[:2500]}"
+        )
+
+    snapshot = "\n\n---\n\n".join(pages)
+    return snapshot[:max_chars]
+
+
 def build_topic_agent_prompt(
     company_context: str,
-    article_count: int = 10,
+    article_count: Optional[int] = None,
     extra_instructions: str = "",
     context_files: Optional[Iterable[str]] = None,
+    website_context: str = "",
+    min_articles: int = 5,
+    max_articles: int = 20,
 ) -> str:
     context = load_context(context_files=context_files, max_chars=60000)
+    count_instruction = (
+        f"Choose exactly {article_count} SEO blog article topics for the company."
+        if article_count
+        else (
+            f"First decide how many articles are needed based on the website analysis. "
+            f"Choose between {min_articles} and {max_articles} articles."
+        )
+    )
+    schema_prefix = (
+        '{"article_count": number, "topics": ['
+        if article_count is None
+        else "["
+    )
+    schema_suffix = "]}" if article_count is None else "]"
+    exact_rule = (
+        f"- Return exactly {article_count} topic objects."
+        if article_count
+        else f"- Return article_count between {min_articles} and {max_articles}, and return exactly that many topic objects."
+    )
     return f"""You are the SEO topic strategy agent for Valencia Theater Seating.
 
-Choose exactly {article_count} SEO blog article topics for the company.
+{count_instruction}
 
 Company context:
 {company_context}
@@ -432,26 +520,30 @@ Default company positioning if not otherwise specified:
 Use this project context when choosing topics:
 {context}
 
+Website analysis:
+{website_context or "No website snapshot provided."}
+
 Extra instructions:
 {extra_instructions or "None"}
 
 Return JSON only. Do not use Markdown fences or commentary.
 
 Schema:
-[
+{schema_prefix}
   {{
     "topic": "specific article topic",
     "primary_keyword": "primary SEO keyword",
     "angle": "the article's unique angle",
     "reason": "why this topic is relevant to Valencia Theater Seating"
   }}
-]
+{schema_suffix}
 
 Rules:
-- Return exactly {article_count} objects.
+{exact_rule}
 - Avoid duplicate or near-duplicate topics.
 - Make topics specific enough to become complete Shopify articles.
 - Prioritize buyer-intent, comparison, planning, and design topics.
+- Use the website analysis to identify product categories, customer questions, gaps, and internal-link opportunities.
 - Do not choose unrelated automotive, generic SEO, or non-furniture topics unless explicitly requested.
 """.strip()
 
@@ -474,6 +566,24 @@ def _extract_json_array(text: str) -> List[Dict[str, str]]:
         raise ActionError("Topic agent did not return a JSON array.")
 
     return data
+
+
+def _extract_json_object_or_array(text: str):
+    cleaned = text.strip()
+    fence_match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        object_match = re.search(r"\{[\s\S]*\}", cleaned)
+        if object_match:
+            return json.loads(object_match.group(0))
+        array_match = re.search(r"\[[\s\S]*\]", cleaned)
+        if array_match:
+            return json.loads(array_match.group(0))
+        raise
 
 
 def parse_topic_choices(text: str, article_count: int = 10) -> List[TopicChoice]:
@@ -505,20 +615,61 @@ def parse_topic_choices(text: str, article_count: int = 10) -> List[TopicChoice]
     return topics[:article_count]
 
 
+def parse_article_plan(
+    text: str,
+    requested_count: Optional[int] = None,
+    min_articles: int = 5,
+    max_articles: int = 20,
+) -> Tuple[int, List[TopicChoice]]:
+    data = _extract_json_object_or_array(text)
+
+    if isinstance(data, dict):
+        raw_count = data.get("article_count")
+        raw_topics = data.get("topics")
+    else:
+        raw_count = requested_count or len(data)
+        raw_topics = data
+
+    if not isinstance(raw_topics, list):
+        raise ActionError("Topic agent did not return a topics array.")
+
+    selected_count = requested_count or int(raw_count or len(raw_topics))
+    if selected_count < min_articles or selected_count > max_articles:
+        raise ActionError(
+            f"Topic agent selected {selected_count} articles; expected between {min_articles} and {max_articles}."
+        )
+
+    topic_text = json.dumps(raw_topics)
+    topics = parse_topic_choices(topic_text, article_count=selected_count)
+    return selected_count, topics
+
+
 def choose_article_topics(
     company_context: str,
-    article_count: int = 10,
+    article_count: Optional[int] = None,
     extra_instructions: str = "",
     context_files: Optional[Iterable[str]] = None,
-) -> Tuple[List[TopicChoice], str]:
+    website_context: str = "",
+    min_articles: int = 5,
+    max_articles: int = 20,
+) -> Tuple[int, List[TopicChoice], str]:
     prompt = build_topic_agent_prompt(
         company_context=company_context,
         article_count=article_count,
         extra_instructions=extra_instructions,
         context_files=context_files,
+        website_context=website_context,
+        min_articles=min_articles,
+        max_articles=max_articles,
     )
     response = call_openai(prompt)
-    return parse_topic_choices(response, article_count=article_count), prompt
+    selected_count, topics = parse_article_plan(
+        response,
+        requested_count=article_count,
+        min_articles=min_articles,
+        max_articles=max_articles,
+    )
+    return selected_count, topics, prompt
 
 
 def extract_shopify_article_signals(html: str) -> Dict[str, List[str] | str]:
@@ -750,47 +901,54 @@ def run_shopify_with_images(
 
 
 def run_write_10_articles(
-    company_context: str = "Valencia Theater Seating",
+    company_context: str = "https://valenciatheaterseating.com/",
     extra_instructions: str = "",
     context_files: Optional[Iterable[str]] = None,
     dry_run: bool = False,
     save: bool = True,
-    article_count: int = 5,
+    article_count: Optional[int] = None,
     continue_on_error: bool = True,
+    min_articles: int = 5,
+    max_articles: int = 20,
 ) -> Write10ArticlesResult:
-    if article_count < 1 or article_count > 10:
-        raise ActionError("article_count must be between 1 and 10.")
+    if min_articles < 1 or max_articles < min_articles:
+        raise ActionError("Invalid article count bounds.")
+    if article_count is not None and (article_count < min_articles or article_count > max_articles):
+        raise ActionError(f"article_count must be between {min_articles} and {max_articles}.")
+
+    website_context = ""
+    if _looks_like_url(company_context):
+        website_context = analyze_website(company_context)
 
     topic_prompt = build_topic_agent_prompt(
         company_context=company_context,
         article_count=article_count,
         extra_instructions=extra_instructions,
         context_files=context_files,
+        website_context=website_context,
+        min_articles=min_articles,
+        max_articles=max_articles,
     )
 
     if dry_run:
-        example_topics = [
-            TopicChoice(
-                topic="Best Home Theater Seating Ideas for Luxury Media Rooms",
-                primary_keyword="home theater seating ideas",
-                angle="Design-led guide for premium media room buyers",
-                reason="Directly supports Valencia Theater Seating product discovery.",
-            )
-        ]
         return Write10ArticlesResult(
             action="write-10-articles",
             company_context=company_context,
-            topics=example_topics,
+            selected_count=article_count or min_articles,
+            topics=[],
             articles=[],
             topic_prompt=topic_prompt,
             dry_run=True,
         )
 
-    topics, topic_prompt = choose_article_topics(
+    selected_count, topics, topic_prompt = choose_article_topics(
         company_context=company_context,
         article_count=article_count,
         extra_instructions=extra_instructions,
         context_files=context_files,
+        website_context=website_context,
+        min_articles=min_articles,
+        max_articles=max_articles,
     )
 
     articles: List[BatchArticleResult] = []
@@ -821,6 +979,7 @@ def run_write_10_articles(
     return Write10ArticlesResult(
         action="write-10-articles",
         company_context=company_context,
+        selected_count=selected_count,
         topics=topics,
         articles=articles,
         topic_prompt=topic_prompt,

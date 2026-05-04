@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from api_backend import (
     PROJECT_ROOT,
+    analyze_website,
     available_actions,
     call_openai,
     clean_model_output,
@@ -12,6 +13,7 @@ from api_backend import (
     insert_shopify_images,
     normalize_action,
     output_path_for_action,
+    parse_article_plan,
     parse_topic_choices,
     run_action,
     run_shopify_with_images,
@@ -150,6 +152,19 @@ class ApiBackendTests(unittest.TestCase):
         self.assertIn("Choose exactly 10", prompt)
         self.assertIn("Return JSON only", prompt)
 
+    def test_build_topic_agent_prompt_auto_count_mentions_range(self):
+        prompt = build_topic_agent_prompt(
+            "https://valenciatheaterseating.com/",
+            article_count=None,
+            website_context="Homepage content",
+            min_articles=5,
+            max_articles=20,
+        )
+
+        self.assertIn("Choose between 5 and 20", prompt)
+        self.assertIn('"article_count": number', prompt)
+        self.assertIn("Homepage content", prompt)
+
     def test_parse_topic_choices_extracts_json_fence(self):
         response = """```json
         [
@@ -166,6 +181,68 @@ class ApiBackendTests(unittest.TestCase):
 
         self.assertEqual(topics[0].topic, "Best Home Theater Seating Ideas")
         self.assertEqual(topics[0].primary_keyword, "home theater seating ideas")
+
+    def test_parse_article_plan_reads_selected_count(self):
+        response = """{
+          "article_count": 5,
+          "topics": [
+            {
+              "topic": "Best Home Theater Seating Ideas",
+              "primary_keyword": "home theater seating ideas",
+              "angle": "Design guide",
+              "reason": "Relevant to Valencia buyers"
+            },
+            {
+              "topic": "Home Theater Recliner Buying Guide",
+              "primary_keyword": "home theater recliner buying guide",
+              "angle": "Buyer guide",
+              "reason": "Relevant to Valencia buyers"
+            },
+            {
+              "topic": "Media Room Seating Layouts",
+              "primary_keyword": "media room seating layout",
+              "angle": "Planning guide",
+              "reason": "Relevant to Valencia buyers"
+            },
+            {
+              "topic": "Leather Theater Seating Care",
+              "primary_keyword": "leather theater seating care",
+              "angle": "Maintenance guide",
+              "reason": "Relevant to Valencia buyers"
+            },
+            {
+              "topic": "Curved vs Straight Theater Seating",
+              "primary_keyword": "curved theater seating",
+              "angle": "Comparison",
+              "reason": "Relevant to Valencia buyers"
+            }
+          ]
+        }"""
+
+        selected_count, topics = parse_article_plan(response)
+
+        self.assertEqual(selected_count, 5)
+        self.assertEqual(len(topics), 5)
+
+    @patch("requests.get")
+    def test_analyze_website_extracts_homepage_signals(self, mock_get):
+        mock_get.return_value = SimpleNamespace(
+            raise_for_status=lambda: None,
+            text="""
+            <html><head><title>Valencia Home Theater Seating</title></head>
+            <body>
+              <h1>Valencia Home Theater Seating</h1>
+              <h2>Home Theater Seating</h2>
+              <a href="/home-theater-seating">Home Theater Seating</a>
+              <p>Premium theater recliners and media room seating.</p>
+            </body></html>
+            """,
+        )
+
+        snapshot = analyze_website("https://valenciatheaterseating.com/", max_pages=1)
+
+        self.assertIn("Valencia Home Theater Seating", snapshot)
+        self.assertIn("Premium theater recliners", snapshot)
 
     def test_build_shopify_image_prompts_returns_two_relevant_prompts(self):
         html = """
@@ -212,14 +289,16 @@ class ApiBackendTests(unittest.TestCase):
 
         self.assertEqual(result.action, "write-10-articles")
         self.assertTrue(result.dry_run)
-        self.assertEqual(len(result.topics), 1)
+        self.assertEqual(result.selected_count, 5)
+        self.assertEqual(result.topics, [])
         self.assertEqual(result.articles, [])
-        self.assertIn("Choose exactly 5", result.topic_prompt)
+        self.assertIn("Choose between 5 and 20", result.topic_prompt)
 
-    def test_write_10_articles_request_defaults_to_five(self):
-        request = Write10ArticlesRequest(input="Valencia Theater Seating")
+    def test_write_10_articles_request_defaults_to_website_and_auto_count(self):
+        request = Write10ArticlesRequest()
 
-        self.assertEqual(request.article_count, 5)
+        self.assertEqual(request.input, "https://valenciatheaterseating.com/")
+        self.assertIsNone(request.article_count)
 
     @patch("api_server.run_action")
     def test_download_shopify_html_returns_attachment(self, mock_run_action):
@@ -280,6 +359,7 @@ class ApiBackendTests(unittest.TestCase):
             action="write-10-articles",
             company_context="Valencia Theater Seating",
             dry_run=True,
+            selected_count=5,
             topics=[topic],
             articles=[],
             topic_prompt="prompt",
