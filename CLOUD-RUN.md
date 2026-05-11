@@ -174,7 +174,7 @@ an older image. Set the Cloud Run environment variables and redeploy:
 ```bash
 gcloud run services update "$SERVICE" \
   --region "$REGION" \
-  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET",SHOPIFY_GCS_CATEGORY=wellness \
+  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,OPENAI_IMAGE_COUNT=2,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET",SHOPIFY_GCS_CATEGORY=wellness \
   --timeout 3600s \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest
 ```
@@ -187,21 +187,21 @@ curl -X POST "$SERVICE_URL/research" \
   -d '{"input":"bmw dealerships toronto","save":true}'
 ```
 
-Generate Shopify HTML with two images and upload all assets:
+Generate Shopify HTML with generated images and upload all assets:
 
 ```bash
 curl -X POST "$SERVICE_URL/shopify-with-images" \
   -H "Content-Type: application/json" \
-  -d '{"input":"bmw dealerships toronto","save":true}'
+  -d '{"input":"bmw dealerships toronto","image_count":2,"save":true}'
 ```
 
 Let the agent analyze Valencia Theater Seating's website, decide between 5 and
-20 articles, and generate two images for each:
+20 articles, and generate the configured image count for each:
 
 ```bash
 curl -X POST "$SERVICE_URL/write-10-articles" \
   -H "Content-Type: application/json" \
-  -d '{"save":true}'
+  -d '{"image_count":2,"save":true}'
 ```
 
 This endpoint can run for several minutes. The deployment examples set Cloud
@@ -222,7 +222,7 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET",SHOPIFY_GCS_CATEGORY=wellness \
+  --set-env-vars SEO_MACHINE_LLM_PROVIDER=openai,OPENAI_MODEL=gpt-5.2,SEO_MACHINE_MAX_TOKENS=12000,OPENAI_IMAGE_MODEL=gpt-image-1.5,OPENAI_IMAGE_SIZE=1536x1024,OPENAI_IMAGE_QUALITY=medium,OPENAI_IMAGE_EXTENSION=png,OPENAI_IMAGE_COUNT=2,GOOGLE_CLOUD_STORAGE_BUCKET="$BUCKET",SHOPIFY_GCS_CATEGORY=wellness \
   --timeout 3600s \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest
 ```

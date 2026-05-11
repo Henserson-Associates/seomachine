@@ -47,12 +47,12 @@ curl -X POST http://127.0.0.1:8000/shopify \
   -d '{"input":"drafts/example-article.md","save":true}'
 ```
 
-Shopify HTML with two generated images uploaded to Google Cloud Storage:
+Shopify HTML with generated images uploaded to Google Cloud Storage:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/shopify-with-images \
   -H "Content-Type: application/json" \
-  -d '{"input":"bmw dealerships toronto","save":true}'
+  -d '{"input":"bmw dealerships toronto","image_count":2,"save":true}'
 ```
 
 Batch article generation is available for Valencia Theater Seating. If you omit
@@ -62,7 +62,7 @@ and chooses between 5 and 20 articles:
 ```bash
 curl -X POST http://127.0.0.1:8000/write-10-articles \
   -H "Content-Type: application/json" \
-  -d '{"save":true}'
+  -d '{"image_count":2,"save":true}'
 ```
 
 See `API-SERVER.md` for all endpoints and examples.

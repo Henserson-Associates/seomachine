@@ -54,6 +54,12 @@ class ActionRequest(BaseModel):
         default=False,
         description="Include the full prompt in the API response.",
     )
+    image_count: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=6,
+        description="Optional number of generated images for /shopify-with-images. Defaults to OPENAI_IMAGE_COUNT or 2.",
+    )
 
 
 class ActionResponse(BaseModel):
@@ -118,6 +124,12 @@ class Write10ArticlesRequest(BaseModel):
     continue_on_error: bool = Field(
         default=True,
         description="Continue generating remaining articles if one topic fails.",
+    )
+    image_count: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=6,
+        description="Optional number of generated images per article. Defaults to OPENAI_IMAGE_COUNT or 2.",
     )
 
 
@@ -262,6 +274,7 @@ def shopify_with_images(request: ActionRequest) -> ShopifyWithImagesResponse:
             context_files=request.context_files,
             dry_run=request.dry_run,
             save=request.save,
+            image_count=request.image_count,
         )
     except ActionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -291,6 +304,7 @@ def write_10_articles(request: Write10ArticlesRequest) -> Write10ArticlesRespons
             dry_run=request.dry_run,
             save=request.save,
             article_count=request.article_count,
+            image_count=request.image_count,
             continue_on_error=request.continue_on_error,
         )
     except ActionError as exc:

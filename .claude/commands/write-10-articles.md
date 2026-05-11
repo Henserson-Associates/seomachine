@@ -1,8 +1,8 @@
 # Write 10 Articles Command
 
 Use this command to analyze Valencia Theater Seating's website, choose the right
-number of SEO article topics, then generate Shopify-ready HTML articles with two
-generated images per article.
+number of SEO article topics, then generate Shopify-ready HTML articles with the
+configured number of generated images per article.
 
 ## Usage
 `/write-10-articles [company context or campaign brief]`
@@ -12,8 +12,8 @@ generated images per article.
 2. Analyzes `https://valenciatheaterseating.com/` by default when no custom input is provided
 3. Chooses between 5 and 20 article topics based on the website analysis, buyer intent, and ecommerce conversion potential
 4. Uses `/shopify-with-images` for each selected topic
-5. Generates two relevant images per article
-6. Uploads each article HTML file and its two images to Google Cloud Storage
+5. Generates the configured number of relevant images per article
+6. Uploads each article HTML file and its images to Google Cloud Storage
 7. Returns the selected topic count, selected topics, and upload metadata in the API response
 
 ## Topic Selection Requirements
@@ -45,7 +45,7 @@ The API returns:
 - The topics selected by the AI agent
 - The primary keyword, angle, and reason for each topic
 - The generated article upload metadata
-- The two image upload URLs per article
+- The image upload URLs per article
 - Any per-topic errors if a specific article fails
 
 Each article is generated through `/shopify-with-images`, so it must preserve:

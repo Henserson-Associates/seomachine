@@ -22,6 +22,9 @@ from urllib.parse import urlparse
 PROJECT_ROOT = Path(__file__).resolve().parent
 COMMANDS_DIR = PROJECT_ROOT / ".claude" / "commands"
 CONTEXT_DIR = PROJECT_ROOT / "context"
+DEFAULT_SHOPIFY_IMAGE_COUNT = 2
+MIN_SHOPIFY_IMAGE_COUNT = 1
+MAX_SHOPIFY_IMAGE_COUNT = 6
 
 DEFAULT_CONTEXT_FILES = [
     "brand-voice.md",
@@ -729,10 +732,34 @@ def shopify_gcs_prefix(html: str, target: str) -> str:
     return f"shopify/{category}/{article_slug}"
 
 
-def build_shopify_image_prompts(html: str, target: str) -> List[str]:
+def resolve_shopify_image_count(image_count: Optional[int] = None) -> int:
+    load_environment()
+
+    raw_count = image_count if image_count is not None else os.getenv("OPENAI_IMAGE_COUNT")
+    if raw_count in (None, ""):
+        return DEFAULT_SHOPIFY_IMAGE_COUNT
+
+    try:
+        count = int(raw_count)
+    except (TypeError, ValueError) as exc:
+        raise ActionError("image_count must be a whole number.") from exc
+
+    if count < MIN_SHOPIFY_IMAGE_COUNT or count > MAX_SHOPIFY_IMAGE_COUNT:
+        raise ActionError(
+            f"image_count must be between {MIN_SHOPIFY_IMAGE_COUNT} and {MAX_SHOPIFY_IMAGE_COUNT}."
+        )
+    return count
+
+
+def build_shopify_image_prompts(
+    html: str,
+    target: str,
+    image_count: int = DEFAULT_SHOPIFY_IMAGE_COUNT,
+) -> List[str]:
     signals = extract_shopify_article_signals(html)
     title = str(signals["title"])
-    sections = "; ".join(signals["sections"]) if signals["sections"] else target
+    section_list = list(signals["sections"])
+    sections = "; ".join(section_list) if section_list else target
     summary = str(signals["summary"])
 
     base_style = (
@@ -742,16 +769,28 @@ def build_shopify_image_prompts(html: str, target: str) -> List[str]:
         "The image must be directly relevant to the article."
     )
 
-    return [
+    prompts = [
         (
             f"{base_style} Hero image for an article titled '{title}'. "
             f"Article topic: {target}. Context: {summary}"
         ),
-        (
+    ]
+
+    if image_count >= 2:
+        prompts.append(
             f"{base_style} Supporting in-article image illustrating these sections: "
             f"{sections}. Article topic: {target}. Make it visually distinct from the hero image."
-        ),
-    ]
+        )
+
+    for index in range(3, image_count + 1):
+        section = section_list[(index - 3) % len(section_list)] if section_list else target
+        prompts.append(
+            f"{base_style} Additional in-article image {index} for the section '{section}' "
+            f"in an article titled '{title}'. Article topic: {target}. Make it distinct "
+            "from the other article images."
+        )
+
+    return prompts[:image_count]
 
 
 def call_openai_image(prompt: str) -> bytes:
@@ -832,12 +871,11 @@ def insert_shopify_images(html: str, image_urls: List[str]) -> str:
             insertion_points.append(first_p_after_h1)
 
     h2s = soup.find_all("h2")
-    if len(h2s) >= 2:
-        insertion_points.append(h2s[1])
-    elif h2s:
-        insertion_points.append(h2s[0])
+    for h2 in h2s:
+        next_p = h2.find_next("p")
+        insertion_points.append(next_p or h2)
 
-    for index, image_url in enumerate(image_urls[:2]):
+    for index, image_url in enumerate(image_urls):
         img_p = soup.new_tag("p")
         img = soup.new_tag("img", src=image_url, alt="")
         img_p.append(img)
@@ -856,14 +894,16 @@ def run_shopify_with_images(
     context_files: Optional[Iterable[str]] = None,
     dry_run: bool = False,
     save: bool = True,
+    image_count: Optional[int] = None,
 ) -> ShopifyWithImagesResult:
     action = "shopify-with-images"
+    resolved_image_count = resolve_shopify_image_count(image_count)
     prompt = build_prompt(
         action="shopify",
         target=target,
         extra_instructions=(
             f"{extra_instructions}\n\n"
-            "Generate Shopify HTML first. The backend will generate and insert two "
+            f"Generate Shopify HTML first. The backend will generate and insert {resolved_image_count} "
             "relevant images after the HTML is produced."
         ).strip(),
         context_files=context_files,
@@ -871,8 +911,8 @@ def run_shopify_with_images(
 
     if dry_run:
         image_prompts = [
-            "Dry run: hero image prompt will be based on generated Shopify HTML.",
-            "Dry run: supporting image prompt will be based on generated Shopify HTML.",
+            f"Dry run: image {index} prompt will be based on generated Shopify HTML."
+            for index in range(1, resolved_image_count + 1)
         ]
         return ShopifyWithImagesResult(
             action=action,
@@ -896,7 +936,7 @@ def run_shopify_with_images(
     )
 
     html = clean_model_output(action, shopify_result.content)
-    image_prompts = build_shopify_image_prompts(html, target)
+    image_prompts = build_shopify_image_prompts(html, target, resolved_image_count)
     slug = slugify(target, fallback="shopify")
     gcs_prefix = shopify_gcs_prefix(html, target)
     article_slug = gcs_prefix.rsplit("/", 1)[-1]
@@ -951,6 +991,7 @@ def run_write_10_articles(
     dry_run: bool = False,
     save: bool = True,
     article_count: Optional[int] = None,
+    image_count: Optional[int] = None,
     continue_on_error: bool = True,
     min_articles: int = 5,
     max_articles: int = 20,
@@ -1013,6 +1054,7 @@ def run_write_10_articles(
                 context_files=context_files,
                 dry_run=False,
                 save=save,
+                image_count=image_count,
             )
             articles.append(BatchArticleResult(topic=topic, result=result, error=None))
         except Exception as exc:

@@ -16,6 +16,7 @@ from api_backend import (
     output_path_for_action,
     parse_article_plan,
     parse_topic_choices,
+    resolve_shopify_image_count,
     run_action,
     run_shopify_with_images,
     run_write_10_articles,
@@ -275,7 +276,21 @@ class ApiBackendTests(unittest.TestCase):
         self.assertIn("BMW Dealerships Toronto", prompts[0])
         self.assertIn("Service and financing", prompts[1])
 
-    def test_insert_shopify_images_adds_two_img_tags(self):
+    def test_build_shopify_image_prompts_supports_custom_count(self):
+        html = """
+        <div class="article-in-this-article"></div>
+        <h1>Massage Chair Buying Guide</h1>
+        <p>Find the right massage chair.</p>
+        <h2>Zero gravity</h2>
+        <h2>Track types</h2>
+        """
+
+        prompts = build_shopify_image_prompts(html, "massage chair buying guide", image_count=3)
+
+        self.assertEqual(len(prompts), 3)
+        self.assertIn("Additional in-article image 3", prompts[2])
+
+    def test_insert_shopify_images_adds_all_img_tags(self):
         html = """
         <div class="article-in-this-article"></div>
         <h1>BMW Dealerships Toronto</h1>
@@ -284,18 +299,35 @@ class ApiBackendTests(unittest.TestCase):
         <h2>Second section</h2>
         """
 
-        result = insert_shopify_images(html, ["https://example.com/1.png", "https://example.com/2.png"])
+        result = insert_shopify_images(
+            html,
+            [
+                "https://example.com/1.png",
+                "https://example.com/2.png",
+                "https://example.com/3.png",
+            ],
+        )
 
         self.assertIn('<img alt="" src="https://example.com/1.png"/>', result)
         self.assertIn('<img alt="" src="https://example.com/2.png"/>', result)
+        self.assertIn('<img alt="" src="https://example.com/3.png"/>', result)
+
+    def test_resolve_shopify_image_count_uses_env_default(self):
+        with patch.dict("os.environ", {"OPENAI_IMAGE_COUNT": "4"}, clear=False):
+            with patch("api_backend.load_environment"):
+                self.assertEqual(resolve_shopify_image_count(), 4)
+
+    def test_resolve_shopify_image_count_rejects_out_of_range(self):
+        with self.assertRaisesRegex(Exception, "image_count must be between"):
+            resolve_shopify_image_count(7)
 
     def test_run_shopify_with_images_dry_run_does_not_generate_images(self):
-        result = run_shopify_with_images("bmw dealerships toronto", dry_run=True)
+        result = run_shopify_with_images("bmw dealerships toronto", dry_run=True, image_count=3)
 
         self.assertEqual(result.action, "shopify-with-images")
         self.assertTrue(result.dry_run)
         self.assertEqual(result.image_assets, [])
-        self.assertEqual(len(result.image_prompts), 2)
+        self.assertEqual(len(result.image_prompts), 3)
 
     def test_run_write_10_articles_dry_run_returns_topic_prompt(self):
         result = run_write_10_articles(
@@ -315,6 +347,7 @@ class ApiBackendTests(unittest.TestCase):
 
         self.assertEqual(request.input, "https://valenciatheaterseating.com/")
         self.assertIsNone(request.article_count)
+        self.assertIsNone(request.image_count)
 
     @patch("api_server.run_action")
     def test_download_shopify_html_returns_attachment(self, mock_run_action):
@@ -358,10 +391,11 @@ class ApiBackendTests(unittest.TestCase):
             prompt="prompt",
         )
 
-        response = shopify_with_images(ActionRequest(input="test", save=True))
+        response = shopify_with_images(ActionRequest(input="test", save=True, image_count=3))
 
         self.assertEqual(response.action, "/shopify-with-images")
         self.assertEqual(response.image_assets[0].public_url, asset.public_url)
+        self.assertEqual(mock_run.call_args.kwargs["image_count"], 3)
 
     @patch("api_server.run_write_10_articles")
     def test_write_10_articles_route_returns_topics(self, mock_run):
@@ -386,12 +420,14 @@ class ApiBackendTests(unittest.TestCase):
                 input="Valencia Theater Seating",
                 dry_run=True,
                 include_prompt=True,
+                image_count=4,
             )
         )
 
         self.assertEqual(response.action, "/write-10-articles")
         self.assertEqual(response.topics[0].topic, topic.topic)
         self.assertEqual(response.prompt, "prompt")
+        self.assertEqual(mock_run.call_args.kwargs["image_count"], 4)
 
 
 if __name__ == "__main__":

@@ -158,14 +158,15 @@ curl -X POST http://127.0.0.1:8000/shopify/download \
   -OJ
 ```
 
-Create Shopify HTML with two generated images and upload all assets to Google
-Cloud Storage:
+Create Shopify HTML with generated images and upload all assets to Google Cloud
+Storage:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/shopify-with-images \
   -H "Content-Type: application/json" \
   -d '{
     "input": "bmw dealerships toronto",
+    "image_count": 2,
     "save": true
   }'
 ```
@@ -178,6 +179,7 @@ export SHOPIFY_GCS_CATEGORY="wellness"
 export OPENAI_IMAGE_MODEL="gpt-image-1.5"
 export OPENAI_IMAGE_SIZE="1536x1024"
 export OPENAI_IMAGE_QUALITY="medium"
+export OPENAI_IMAGE_COUNT="2"
 ```
 
 The response includes:
@@ -206,13 +208,15 @@ OpenAI's public image docs currently list GPT Image models such as
 access to a newer `gpt-image-2` model, set `OPENAI_IMAGE_MODEL=gpt-image-2`.
 
 Analyze Valencia Theater Seating's website by default, let the agent decide how
-many articles are needed between 5 and 20, generate Shopify HTML with two images
-per article, and upload all articles plus images to Google Cloud Storage:
+many articles are needed between 5 and 20, generate Shopify HTML with the
+configured image count per article, and upload all articles plus images to
+Google Cloud Storage:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/write-10-articles \
   -H "Content-Type: application/json" \
   -d '{
+    "image_count": 2,
     "save": true,
     "dry_run": false
   }'
@@ -226,6 +230,7 @@ curl -X POST http://127.0.0.1:8000/write-10-articles \
   -d '{
     "input": "Valencia Theater Seating: premium home theater seating, theater recliners, theater sofas, media room seating, luxury entertainment room furniture",
     "article_count": 7,
+    "image_count": 3,
     "save": true,
     "dry_run": false
   }'
@@ -295,5 +300,5 @@ curl -X POST http://127.0.0.1:8000/research \
 - `/optimize` saves to `drafts/optimization-report-[slug]-[date].md`
 - `/shopify` saves to `output/shopify-[slug]-[date].html`
 - `/shopify-with-images` saves to `output/shopify-with-images-[slug]-[date].html`
-  and uploads the HTML plus two images to Google Cloud Storage.
+  and uploads the HTML plus generated images to Google Cloud Storage.
 - Other commands save to the closest existing workflow folder.
